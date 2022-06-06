@@ -1,0 +1,128 @@
+#!/bin/bash
+
+# Version: Aug 15, 2020
+# Copyrights by He liyu, BMEC, USTC
+# Email: ly666@mail.ustc.edu.cn
+
+
+
+. step0_configureScripts
+
+smooth() {
+# $1 is subject's name
+	name=$1
+	pathpwd=$(pwd)
+	
+		
+	echo $name >>$smooth_dir/run.txt
+	echo Begin $name
+	date1=`date`
+	mkdir $smooth_dir/sub-$name
+	cd $smooth_dir/sub-$name/
+
+    inputfiles=`ls $prepre_dir_nosmooth/sub-$name/ | grep $BOLDfile_nosmooth`
+
+    for input in $inputfiles
+    do 
+        #Is cifti format?
+        ext=${input%.*}
+        ext=${ext##*.}
+        if [ "$ext" == "dtseries" ];then 
+            export IsCifti=1
+        else
+            export IsCifti=0
+        fi
+
+        if [ $IsCifti -eq 1 ]
+        then	
+            wb_command -cifti-dilate $prepre_dir_nosmooth/sub-$name/$input COLUMN 20 20 $smooth_dir/sub-$name/$input -left-surface $Surface_L -right-surface $Surface_R -nearest
+            command="wb_command -cifti-smoothing $smooth_dir/sub-$name/$input $FWHM_surface $FWHM_volume COLUMN $smooth_dir/sub-$name/$input \
+                -left-surface $Surface_L -right-surface $Surface_R"
+
+        elif [ "${input##*.}" == "gii" ];then
+            export SUBJECTS_DIR=$freesurfer_dir
+            ref_surf=$[`awk -v a="$input" -v b="fsaverage" 'BEGIN{print index(a,b)}'`-1]
+            ref_surf=${input:$ref_surf:10}
+            hem=$[`awk -v a="$input" -v b="hemi-" 'BEGIN{print index(a,b)}'`+4]
+            hem=${input:$hem:1}
+            hem=$(echo $hem | tr '[A-Z]' '[a-z]')
+
+            command="mri_surf2surf --s $ref_surf --hemi $hem"h" --sval $prepre_dir_nosmooth/sub-$name/$input \
+                                --fwhm $FWHM_surface --cortex --tval $smooth_dir/sub-$name/$input" 
+        else
+            if [ -n "$sBrainMask" ];then
+                command="3dmerge	-1blur_fwhm $FWHM_volume \
+                        -doall \
+                        -1fmask $mni_prepre_dir/sub-$name/func/sub-$name$BrainMask \
+                        -prefix $smooth_dir/sub-$name/$input \
+                        $prepre_dir_nosmooth/sub-$name/$input"
+            else
+                command="3dmerge	-1blur_fwhm $FWHM_volume \
+                        -doall \
+                        -prefix $smooth_dir/sub-$name/$input \
+                        $prepre_dir_nosmooth/sub-$name/$input"
+            fi
+        fi
+        if [ -n "$command" ];then
+            errorinfo=`$command`  #run 
+            aaa=$?;
+            if [ "$aaa" == "1" ];then
+                echo -e "$name exist error \n $errorinfo \n">>$smooth_dir/sub-$name/$name'_error_report.txt'
+            fi
+        fi
+    done
+
+    echo "$name start at $date1 end at `date`" >>$smooth_dir/time.txt
+    echo end $name
+	
+	cd $pathpwd
+}
+
+export -f smooth
+
+# sublist
+export FWHM_volume=2.55
+export FWHM_surface=2.55
+
+sub=$(ls $prepre_dir_nosmooth -l |grep "^d" |awk '{print $9}' |grep sub |sed "s/sub-//g")
+echo $sub >out.txt
+numSub=$(cat out.txt |awk '{print NF}')
+
+echo -e "\033[31m -----------------------------------------$numSub Subjects wait for processing--------------------------------------------------- \033[0m"
+
+cat out.txt | xargs  -n10
+
+echo -e "\033[31m -------------------------------------------------------------------------------------------- \033[0m"
+
+echo -e "\033[32m ----------------------------------Configures for Regress Out Nuisance and Filter---------------------------------------------------------- \033[0m"
+
+echo "Input_files= $prepre_dir_nosmooth/sub-xx/sub-xx*$BOLDfile_nosmooth"*""
+
+echo "Output_DIR= $smooth_dir"
+
+echo "Surface files are $Surface_L and $Surface_R"
+
+echo "FWHM : Volume $FWHM_volume"mm" , Surface $FWHM_surface"mm""
+
+echo "CPU settings: Handle $nparallel participant simultaneously" 
+
+echo -e "\033[32m -------------------------------------------------------------------------------------------- \033[0m"
+
+echo -e "\033[31m ----------------------------------------Processing Start (parallel $nparallel)---------------------------------------------------- \033[0m"
+
+mkdir $smooth_dir
+
+
+
+parallel -j $nparallel --results $smooth_dir/ParaLog smooth ::: $sub
+
+echo -e "\033[31m -------------------------------------Processing Complete------------------------------------------------------- \033[0m"
+
+echo `date`
+
+rm out.txt
+
+
+
+
+

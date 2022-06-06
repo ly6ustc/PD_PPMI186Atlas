@@ -1,0 +1,28 @@
+#!/bin/bash
+
+# Version: Aug 15, 2020
+# Copyrights by He liyu, BMEC, USTC
+# Email: ly666@mail.ustc.edu.cn
+
+
+ScriptPath=$(cd `dirname $0`; pwd)
+
+echo "ScriptPath is $ScriptPath"
+
+cd $ScriptPath
+
+#./step0_configureScripts
+
+#./step1_Dcm2BIDS
+
+#./step2_RemoveTRScripts
+
+#./step3_mriqcScripts
+
+#./step4_fmriprepScripts
+
+#./step5_regress_nuisance_and_filter
+
+./step6_smooth
+
+./ResampleSurf

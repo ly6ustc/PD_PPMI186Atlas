@@ -1,0 +1,150 @@
+#!/bin/bash
+
+# Version: Aug 15, 2020
+# Copyrights by He liyu, BMEC, USTC
+# Email: ly666@mail.ustc.edu.cn
+
+#---------------------You can add some required parameters------------------------------------------------
+
+#usage: fmriprep [-h] [--version] [--skip_bids_validation]
+		#[--low-mem] ~~use lower memory 
+		#[--anat-only] ~~run anatomical workflows only
+                #[--ignore {fieldmaps,slicetiming,sbref} [{fieldmaps,slicetiming,sbref} ...]]  ~~ignore some steps 
+                #[--use-aroma]  ~~use ICA-AROMA remove headmotion effect
+		#[--cifti-output [{91k,170k}] ~~ HCP output format, left cortex surface+right cortex surface+ other volume
+                #[--fs-no-reconall] ~~ disable FreeSurfer surface preprocessing.
+
+#----------------more choice can be found in https://fmriprep.org/en/stable/usage.html --------------------------
+. step0_configureScripts
+
+sub=$(ls $BIDSdir -l |grep "^d" |awk '{print $9}' |grep sub |sed "s/sub-//g")
+
+#Generage Group fmriqc Report
+echo "<HTML><HEAD><TITLE>Check Surface Reconstruction</TITLE>" > ../QC/QC_SurfaceReconstruction.html
+echo "<HTML><HEAD><TITLE>Check Surface Reconstruction</TITLE>" >> ../QC/QC_SurfaceReconstruction.html
+echo "<link rel="stylesheet" ...href="exp.css" type="text/css">" >> ../QC/QC_SurfaceReconstruction.html
+echo "</HEAD>" >> ../QC/QC_SurfaceReconstruction.html
+echo "<BODY>" >> ../QC/QC_SurfaceReconstruction.html
+echo "<H1>Check Surface Reconstruction</H1>" >> ../QC/QC_SurfaceReconstruction.html
+echo "<HR SIZE=5>" >> ../QC/QC_SurfaceReconstruction.html
+
+for i in $sub
+do
+    echo "<li>Subject ID: sub-$i</li>" >> ../QC/QC_SurfaceReconstruction.html
+	echo "<div class="elem-image">" >> ../QC/QC_SurfaceReconstruction.html
+	echo "<object data=" ../fmriprep/fmriprep/sub-$i/figures/sub-$i'_desc-reconall_T1w.svg'" type="image/svg+xml"></object>" >> ../fmriprep/QC_SurfaceReconstruction.html
+	echo "</div>" >> ../QC/QC_SurfaceReconstruction.html
+	echo "<br>" >> ../QC/QC_SurfaceReconstruction.html
+	echo "<br>" >> ../QC/QC_SurfaceReconstruction.html
+done
+
+echo "</BODY>" >> ../QC/QC_SurfaceReconstruction.html
+echo "</HTML>" >> ../QC/QC_SurfaceReconstruction.html
+
+#Generage Group fmriprep Report
+
+echo "<HTML><HEAD><TITLE>Check Surface Reconstruction</TITLE>" > ../fmriprep/QC_SurfaceReconstruction.html
+echo "<HTML><HEAD><TITLE>Check Surface Reconstruction</TITLE>" >> ../fmriprep/QC_SurfaceReconstruction.html
+echo "<link rel="stylesheet" ...href="exp.css" type="text/css">" >> ../fmriprep/QC_SurfaceReconstruction.html
+echo "</HEAD>" >> ../fmriprep/QC_SurfaceReconstruction.html
+echo "<BODY>" >> ../fmriprep/QC_SurfaceReconstruction.html
+echo "<H1>Check Surface Reconstruction</H1>" >> ../fmriprep/QC_SurfaceReconstruction.html
+echo "<HR SIZE=5>" >> ../fmriprep/QC_SurfaceReconstruction.html
+
+for i in $sub
+do
+    echo "<li>Subject ID: sub-$i</li>" >> ../fmriprep/QC_SurfaceReconstruction.html
+	echo "<div class="elem-image">" >> ../fmriprep/QC_SurfaceReconstruction.html
+	echo "<object data=" ../fmriprep/fmriprep/sub-$i/figures/sub-$i'_desc-reconall_T1w.svg'" type="image/svg+xml"></object>" >> ../fmriprep/QC_SurfaceReconstruction.html
+	echo "</div>" >> ../fmriprep/QC_SurfaceReconstruction.html
+	echo "<br>" >> ../fmriprep/QC_SurfaceReconstruction.html
+	echo "<br>" >> ../fmriprep/QC_SurfaceReconstruction.html
+done
+
+echo "</BODY>" >> ../fmriprep/QC_SurfaceReconstruction.html
+echo "</HTML>" >> ../fmriprep/QC_SurfaceReconstruction.html
+
+#wkhtmltopdf  ../fmriprep/QC_SurfaceReconstruction.html  ../fmriprep/QC_SurfaceReconstruction.pdf
+
+echo "<HTML><HEAD><TITLE>Check Surface Reconstruction</TITLE>" > ../fmriprep/QC_T1toMNI.html
+echo "<HTML><HEAD><TITLE>Check Surface Reconstruction</TITLE>" >> ../fmriprep/QC_T1toMNI.html
+echo "<link rel="stylesheet" ...href="exp.css" type="text/css">" >> ../fmriprep/QC_T1toMNI.html
+echo "</HEAD>" >> ../fmriprep/QC_T1toMNI.html
+echo "<BODY>" >> ../fmriprep/QC_T1toMNI.html
+echo "<H1>Check Surface Reconstruction</H1>" >> ../fmriprep/QC_T1toMNI.html
+echo "<HR SIZE=5>" >> ../fmriprep/QC_T1toMNI.html
+
+for i in $sub
+do
+	echo "<li>Subject ID: sub-$i</li>" >> ../fmriprep/QC_T1toMNI.html
+	for j in `ls ../fmriprep/fmriprep/sub-$i/figures |grep _space-`
+		do 
+		echo "<li>sub-$i/$j</li>" >> ../fmriprep/QC_T1toMNI.html
+		echo "<div class="elem-image">" >> ../fmriprep/QC_T1toMNI.html
+		echo "<object data=" ../fmriprep/fmriprep/sub-$i/figures/$j" type="image/svg+xml"></object>" >> ../fmriprep/QC_T1toMNI.html
+		echo "</div>" >> ../fmriprep/QC_T1toMNI.html
+		echo "<br>" >> ../fmriprep/QC_T1toMNI.html
+		echo "<br>" >> ../fmriprep/QC_T1toMNI.html
+	done
+done
+
+echo "</BODY>" >> ../fmriprep/QC_T1toMNI.html
+echo "</HTML>" >> ../fmriprep/QC_T1toMNI.html
+
+
+echo "<HTML><HEAD><TITLE>Check Surface Reconstruction</TITLE>" > ../fmriprep/QC_EPItoT1.html
+echo "<HTML><HEAD><TITLE>Check Surface Reconstruction</TITLE>" >> ../fmriprep/QC_EPItoT1.html
+echo "<link rel="stylesheet" ...href="exp.css" type="text/css">" >> ../fmriprep/QC_EPItoT1.html
+echo "</HEAD>" >> ../fmriprep/QC_EPItoT1.html
+echo "<BODY>" >> ../fmriprep/QC_EPItoT1.html
+echo "<H1>Check Surface Reconstruction</H1>" >> ../fmriprep/QC_EPItoT1.html
+echo "<HR SIZE=5>" >> ../fmriprep/QC_EPItoT1.html
+
+
+for i in $sub
+do
+	echo "<li>Subject ID: sub-$i</li>" >> ../fmriprep/QC_EPItoT1.html
+	session=`ls ../fmriprep/fmriprep/sub-$i |grep ses-`
+	if [ -n "$session" ]; then
+		for j in $session
+			do 
+			echo "<li>sub-$i/$j</li>" >> ../fmriprep/QC_EPItoT1.html
+			for k in `ls ../fmriprep/fmriprep/sub-$i/$j/figures/ |grep desc-bbregister`
+			do
+				echo "<div class="elem-image">" >> ../fmriprep/QC_EPItoT1.html
+				echo "<li>$k</li>" >> ../fmriprep/QC_EPItoT1.html
+				echo "<object data=" ../fmriprep/fmriprep/sub-$i/$j/figures/$k" type="image/svg+xml"></object>" >> ../fmriprep/QC_EPItoT1.html
+				echo "</div>" >> ../fmriprep/QC_EPItoT1.html
+				echo "<br>" >> ../fmriprep/QC_EPItoT1.html
+				echo "<br>" >> ../fmriprep/QC_EPItoT1.html
+			done
+		done
+	else
+		for k in `ls ../fmriprep/fmriprep/sub-$i/figures/ |grep desc-bbregister`
+			do
+				echo "<div class="elem-image">" >> ../fmriprep/QC_EPItoT1.html
+				echo "<li>$k</li>" >> ../fmriprep/QC_EPItoT1.html
+				echo "<object data=" ../fmriprep/fmriprep/sub-$i/figures/$k" type="image/svg+xml"></object>" >> ../fmriprep/QC_EPItoT1.html
+				echo "</div>" >> ../fmriprep/QC_EPItoT1.html
+				echo "<br>" >> ../fmriprep/QC_EPItoT1.html
+				echo "<br>" >> ../fmriprep/QC_EPItoT1.html
+			done
+	fi
+done
+
+echo "</BODY>" >> ../fmriprep/QC_EPItoT1.html
+echo "</HTML>" >> ../fmriprep/QC_EPItoT1.html
+
+
+
+
+echo "--------------------------------Organize fmriprep complete ------------------------------------"	
+
+
+
+echo "--------------------------------------------All fmriprep Done----------------------------------------------"
+echo `date`
+
+
+
+

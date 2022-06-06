@@ -1,0 +1,101 @@
+#!/bin/bash
+
+# Version: Aug 15, 2020
+# Copyrights by He liyu, BMEC, USTC
+# Email: ly666@mail.ustc.edu.cn
+
+
+resample() {
+# $1 is subject's name
+	name=$1
+	pathpwd=$(pwd)
+	
+		
+	echo $name >>$outputdir/run.txt
+	echo Begin $name
+	date1=`date`
+	mkdir $outputdir/sub-$name
+    inputfiles=`ls $inputdir/sub-$name/ | grep $BOLDfile`
+
+    for input in $inputfiles
+    do 
+
+        if [ -f "$outputdir/sub-$name/$input" ]; then
+            rm $outputdir/sub-$name/$input
+        fi
+        if [ -f "$outputdir/sub-$name/sub-$name"_volume"$re"mm".nii" ]; then
+            rm $outputdir/sub-$name/sub-$name"_volume"$re"mm".nii
+        fi
+
+        wb_command -cifti-separate $inputdir/sub-$name/$input COLUMN -volume-all $outputdir/sub-$name/volume.nii
+    done
+    
+    echo "$name start at $date1 end at `date`" >>$outputdir/time.txt
+    echo end $name
+	
+	cd $pathpwd
+}
+
+export -f resample
+
+
+ScriptPath=$(cd `dirname $0`; pwd)
+cd $ScriptPath
+
+export inputdir="../Smooth_dir"
+export BOLDfile="_space-fsLR_den-91k_bold.dtseries.nii"
+export outputdir="../Reslice_dir_Sub"
+export current_sphere_L="./template/fsLR_32K/tpl-fsLR_space-fsaverage_hemi-L_den-32k_sphere.surf.gii"
+export current_sphere_R="./template/fsLR_32K/tpl-fsLR_space-fsaverage_hemi-R_den-32k_sphere.surf.gii"
+export target_sphere_L="./template/fsLR_32K/tpl-fsaverage_hemi-L_res-10k_sphere.surf.gii"
+export target_sphere_R="./template/fsLR_32K/tpl-fsaverage_hemi-R_res-10k_sphere.surf.gii"
+export method="BARYCENTRIC"
+export re=4
+export nparallel=5
+
+
+# sublist
+
+
+sub=$(ls $inputdir -l |grep "^d" |awk '{print $9}' |grep sub |sed "s/sub-//g")
+echo $sub >out.txt
+numSub=$(cat out.txt |awk '{print NF}')
+
+echo -e "\033[31m -----------------------------------------$numSub Subjects wait for processing--------------------------------------------------- \033[0m"
+
+cat out.txt | xargs  -n10
+
+echo -e "\033[31m -------------------------------------------------------------------------------------------- \033[0m"
+
+echo -e "\033[32m ----------------------------------Configures for Regress Out Nuisance and Filter---------------------------------------------------------- \033[0m"
+
+echo "Input_files= $inputdir/sub-xx/sub-xx*$BOLDfile"*""
+
+echo "Output_DIR= $outputdir"
+
+echo "Current_sphere files are $current_sphere_L and $current_sphere_R"
+
+echo "Target_sphere files are $target_sphere_L and $target_sphere_R"
+
+echo "Resample Method is $method, Volume resample solution $re"mm""
+
+echo "CPU settings: Handle $nparallel participant simultaneously" 
+
+echo -e "\033[32m -------------------------------------------------------------------------------------------- \033[0m"
+
+echo -e "\033[31m ----------------------------------------Processing Start (parallel $nparallel)---------------------------------------------------- \033[0m"
+
+mkdir $outputdir
+
+parallel -j $nparallel --results $outputdir/ParaLog resample ::: $sub
+
+echo -e "\033[31m -------------------------------------Processing Complete------------------------------------------------------- \033[0m"
+
+echo `date`
+
+rm out.txt
+
+
+
+
+

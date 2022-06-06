@@ -1,0 +1,66 @@
+#!/bin/bash
+
+# Version: Aug 18, 2020
+# Copyrights by He liyu, BMEC, USTC
+# Email: ly666@mail.ustc.edu.cn
+
+
+. step0_configureScripts
+
+RemoveTRfunc() {
+# $1 is subject's name
+	name=$1
+
+# NOTE: Remove first TRs.
+	session=`ls $BIDSdir/sub-$name |grep ses-`
+	if [ -n "$session" ]; then
+		echo -n "$name orignal time points is " 
+		for Sess in $session;
+		do 	
+			temp=`ls $BIDSdir/sub-$name/$Sess/func | grep nii`
+			num=`3dinfo $BIDSdir/sub-$name/$Sess/func/$temp | grep 'Number of time'`
+			echo -n "${num:23:5} "
+			mv $BIDSdir/sub-$name/$Sess/func/$temp $BIDSdir/sub-$name/$Sess/func/t$temp
+			3dTcat 	-prefix $BIDSdir/sub-$name/$Sess/func/$temp \
+			$BIDSdir/sub-$name/$Sess/func/t$temp"["$BOLD_REMOVE_TR"..$]"
+			rm $BIDSdir/sub-$name/$Sess/func/t$temp
+		done
+		echo ''
+		
+	else
+		temp=`ls $BIDSdir/sub-$name/func | grep nii`
+		num=`3dinfo $BIDSdir/sub-$name/func/$temp | grep 'Number of time'`
+		echo $name orignal time points is ${num:23:5}
+		mv $BIDSdir/sub-$name/func/$temp $BIDSdir/sub-$name/func/t$temp
+		3dTcat 	-prefix $BIDSdir/sub-$name/func/$temp \
+		$BIDSdir/sub-$name/func/t$temp"["$BOLD_REMOVE_TR"..$]"
+		rm $BIDSdir/sub-$name/func/t$temp
+	fi
+}
+
+export -f RemoveTRfunc
+
+
+# sublist
+
+sub=$(ls $BIDSdir -l |grep "^d" |awk '{print $9}'|grep sub |sed "s/sub-//g")
+echo $sub >out.txt
+numSub=$(cat out.txt |awk '{print NF}')
+echo -e "\033[32m ----------------------------------$numSub Subjects wait for Remove $BOLD_REMOVE_TR TR------------------------------------------ \033[0m"
+
+cat out.txt | xargs  -n10
+
+echo -e "\033[32m ------------------------------------------------------------------------------------------------------------------------------- \033[0m"
+
+rm out.txt
+
+echo -e "\033[31m -----------------------Remove first $BOLD_REMOVE_TR TR (parallel $BOLD_REMOVE_nparallel)--------------------------------------- \033[0m"
+
+if [ ! $BOLD_REMOVE_TR -eq 0 ];then
+
+	parallel -j $BOLD_REMOVE_nparallel  RemoveTRfunc ::: $sub
+fi
+
+echo -e "\033[31m ---------------------------------------------------Remove TR Complete---------------------------------------------------------- \033[0m"
+
+echo `date`

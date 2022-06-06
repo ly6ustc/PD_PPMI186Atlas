@@ -1,0 +1,119 @@
+#!/bin/bash
+
+
+. step0_configureScripts
+
+convert_native2fs() {
+
+# $1 is subject's name
+	name=$1
+	pathpwd=$(pwd)
+
+	echo $name >>$Results_dir/run.txt
+	echo Begin $name
+	date1=`date`
+	export SUBJECTS_DIR=$freesurfer_dir
+
+	Anat_prefix=($(cat $Results_dir/Anat_prefix.txt))
+
+	mkdir $Results_dir/sub-$name
+
+	for j in ${Anat_prefix[@]}
+    do
+		mri_surf2surf --srcsubject sub-$name --trgsubject $fsTarget_space --hemi lh --sval $freesurfer_dir/sub-$name/surf/lh.$j --tval $Results_dir/sub-$name/$fsTarget_space-L-$j.func.gii --cortex
+		mri_surf2surf --srcsubject sub-$name --trgsubject $fsTarget_space --hemi rh --sval $freesurfer_dir/sub-$name/surf/rh.$j --tval $Results_dir/sub-$name/$fsTarget_space-R-$j.func.gii --cortex
+		wb_command -cifti-create-dense-scalar $Results_dir/sub-$name/$fsTarget_space-$j.dscalar.nii -left-metric $Results_dir/sub-$name/$fsTarget_space-L-$j.func.gii \
+		-right-metric $Results_dir/sub-$name/$fsTarget_space-R-$j.func.gii
+		
+		if [[ $(echo "$anat_smooth_fwhm > 0"|bc) -eq 1 ]]
+		then
+		mri_surf2surf --s $fsTarget_space --hemi lh --sval $Results_dir/sub-$name/$fsTarget_space-L-$j.func.gii --fwhm $anat_smooth_fwhm --tval $Results_dir/sub-$name/$fsTarget_space-L-$j'_smooth'.func.gii
+		mri_surf2surf --s $fsTarget_space --hemi rh --sval $Results_dir/sub-$name/$fsTarget_space-R-$j.func.gii --fwhm $anat_smooth_fwhm --tval $Results_dir/sub-$name/$fsTarget_space-R-$j'_smooth'.func.gii
+		wb_command -cifti-create-dense-scalar $Results_dir/sub-$name/$fsTarget_space-$j'_smooth'.dscalar.nii -left-metric $Results_dir/sub-$name/$fsTarget_space-L-$j'_smooth'.func.gii \
+		-right-metric $Results_dir/sub-$name/$fsTarget_space-R-$j'_smooth'.func.gii
+		rm $Results_dir/sub-$name/$fsTarget_space-L-$j'_smooth'.func.gii
+		rm $Results_dir/sub-$name/$fsTarget_space-R-$j'_smooth'.func.gii
+		fi 
+
+		if [ $target_iscifti -eq 1 ]
+		then
+			if [ "$fsTarget_space" != "fsaverage" ]; then
+				mri_surf2surf --srcsubject sub-$name --trgsubject fsaverage --hemi lh --sval $freesurfer_dir/sub-$name/surf/lh.$j --tval $Results_dir/sub-$name/fsaverage-L-$j.func.gii --cortex
+				mri_surf2surf --srcsubject sub-$name --trgsubject fsaverage --hemi rh --sval $freesurfer_dir/sub-$name/surf/rh.$j --tval $Results_dir/sub-$name/fsaverage-R-$j.func.gii --cortex
+                rm $Results_dir/sub-$name/$fsTarget_space-L-$j.func.gii
+                rm $Results_dir/sub-$name/$fsTarget_space-R-$j.func.gii
+			fi
+			wb_command -metric-resample $Results_dir/sub-$name/fsaverage-L-$j.func.gii $current_sphere_L $target_sphere_L ADAP_BARY_AREA $Results_dir/sub-$name/fsLR32K-L-$j.func.gii \
+			-area-metrics $current_area_L $target_area_L
+			wb_command -metric-resample $Results_dir/sub-$name/fsaverage-R-$j.func.gii $current_sphere_R $target_sphere_R ADAP_BARY_AREA $Results_dir/sub-$name/fsLR32K-R-$j.func.gii \
+			-area-metrics $current_area_R $target_area_R
+			wb_command -cifti-create-dense-scalar $Results_dir/sub-$name/fsLR32K-$j.dscalar.nii -left-metric $Results_dir/sub-$name/fsLR32K-L-$j.func.gii \
+			-right-metric $Results_dir/sub-$name/fsLR32K-R-$j.func.gii
+            rm $Results_dir/sub-$name/fsLR32K-L-$j.func.gii
+            rm $Results_dir/sub-$name/fsLR32K-R-$j.func.gii
+            rm $Results_dir/sub-$name/fsaverage-L-$j.func.gii
+            rm $Results_dir/sub-$name/fsaverage-R-$j.func.gii
+		fi
+		if [[ $(echo "$anat_smooth_fwhm > 0"|bc) -eq 1 ]]; then
+		wb_command -cifti-smoothing $Results_dir/sub-$name/fsLR32K-$j.dscalar.nii $anat_smooth_fwhm $anat_smooth_fwhm COLUMN $Results_dir/sub-$name/fsLR32K-$j'_smooth'.dscalar.nii \
+		        -left-surface $Surface_L -right-surface $Surface_R
+		fi
+
+	done
+	echo "$name start at $date1 end at `date`" >>$Results_dir/time.txt
+	echo End $name
+}
+export -f convert_native2fs
+
+
+#subject list
+
+sub=$(ls $freesurfer_dir -l |grep "^d" |awk '{print $9}' |grep sub |sed "s/sub-//g")
+
+echo $sub >out.txt
+
+numSub=$(cat out.txt |awk '{print NF}')
+
+echo -e "\033[31m ----------------------------------------$numSub Subjects wait for processing --------------------------------- \033[0m"
+cat out.txt | xargs  -n10
+echo -e "\033[31m -------------------------------------------------------------------------------------------- \033[0m"
+
+echo -e "\033[32m -----------------------------------Configures for convert native space to standard space------------------------------ \033[0m"
+
+echo "Freesurfer directory = $freesurfer_dir"
+
+echo "Output_DIR= $Results_dir"
+
+echo "${#Anat_prefix[@]} Anatomy files are ${Anat_prefix[@]}"
+
+echo "fsaverage Target space is $fsTarget_space"
+
+if [ $target_iscifti -eq 1 ]
+then
+	echo "Convert to fsLR space"
+	echo "Using fsaverage template $current_sphere_L $current_area_L"
+	echo "Using fsLR template $target_sphere_L $target_area_L"
+fi
+
+if [[ $(echo "$anat_smooth_fwhm > 0"|bc) -eq 1 ]]
+then
+	echo  -e "\033[44;30m "Using $anat_smooth_fwhm Smothing!" \033[0m"
+fi
+
+echo "CPU settings: Handle $Anat_nparallel participant simultaneously" 
+
+echo -e "\033[31m ----------------------------------------Processing Start (parallel $Anat_nparallel)---------------------------------------------------- \033[0m"
+
+mkdir -p $Results_dir
+
+echo ${Anat_prefix[@]} > $Results_dir/Anat_prefix.txt
+
+rm out.txt
+
+parallel -j $Anat_nparallel --results $Results_dir/ParaLog convert_native2fs ::: $sub
+
+echo -e "\033[31m -------------------------------------Processing Complete------------------------------------------------------- \033[0m"
+
+echo `date`
+
+#rm $Results_dir/Anat_prefix.txt

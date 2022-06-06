@@ -1,0 +1,194 @@
+#!/bin/bash
+
+# Version: Aug 15, 2020
+# Copyrights by He liyu, BMEC, USTC
+# Email: ly666@mail.ustc.edu.cn
+
+# Cofigures 
+
+# parent directory 
+
+par_dir=$(dirname $(pwd))
+
+#------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+#Dicom input path/ BIDS output path for Dcm2BIDS, for script step1
+
+export DCM_path=$par_dir/DCM/{subject}/{session}/*/*IMA
+
+export BIDS_path=$par_dir/BIDS 
+
+export DCM2BIDS_nparallel=1                             # Process the number of subjects simultaneously
+
+#------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+#Discard some fisrt volume, for script step2
+
+export BOLD_REMOVE_TR=5
+
+export BOLD_REMOVE_nparallel=$DCM2BIDS_nparallel
+
+#------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+#Configures for mriqc (QC for T1 and BOLD), for script step3
+
+export BIDSdirQC=$par_dir/BIDS                          # input dir  ~~~should satisfy BIDS
+
+export prepre_dirQC=$par_dir/QC                         # output dir ~~~fmriprep will generate a folder named fmriprep under outdir
+
+export work_dirQC=$prepre_dirQC                         # work dir  ~~~fmriprep will generate intermediate files for each person under workdir
+
+#export ncpus=2                                         # ncpus * 200%CPU max use percentage per process, it is invalid because of BUG
+
+export QC_nparallel=$DCM2BIDS_nparallel                 # Process the number of subjects simultaneously
+
+export mode='bold T1w' # ~~ or T2w
+
+#------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+#Configures for fmriprep (usually 4G memory per participant), for script step4
+
+export BIDSdir=$par_dir/BIDS                            # input dir  ~~~should satisfy BIDS
+
+export prepre_dir=$par_dir/fmriprep                     # output dir ~~~fmriprep will generate a folder named fmriprep under outdir
+
+export work_dir=$prepre_dir                             # work dir  ~~~fmriprep will generate intermediate files for each person under workdir
+
+export freesurfer_dir=$par_dir/fmriprep/freesurferfreesurfer_dir      # freesurfer recon-all results dir  ~~~fmriprep will use these files instead of performing freesurfer again
+
+export fs_licence=/home/z/Data/Toolbox/MatlabToolBox/ly/license.txt
+
+export nthreads=2                                       # nthreads * 100%CPU max use percentage per process
+
+export fmriprep_nparallel=$DCM2BIDS_nparallel           # Process the number of subjects simultaneously
+
+export out_space="MNI152NLin2009cAsym:res-2 MNI152NLin2009cAsym:res-native MNI152NLin6Asym:res-2 MNI152NLin6Asym:res-native func fsaverage5 fsaverage6 anat fsnative MNI152NLin2009cAsymPD25:res-2"
+
+#-------------------------Out Space Possible choices-----------------------------#
+# Standard spaces:
+#		 1 volume
+#		  1) MNI152NLin6Asym:res-1 MNI152NLin6Asym:res-1 MNI152NLin6Asym:res-native  ~~MNI152NLin6Asym(FSL space) in 1m,2m or native(BOLD) resolution
+# 		  2) MNI152NLin2009cAsym:res-1 MNI152NLin2009cAsym:res-1 MNI152NLin2009cAsym:res-native  ~~MNI152NLin2009cAsym in 1m,2m or native(BOLD) resolution
+#		  3) Other existing template in fmriprep template dir ($HOME/.cache/templateflow)
+#		 2 Surface
+#		  1) fsaverage ~~high resolution
+#		  2) fsaverage5 ~~low resolution (recommended for BOLD)
+# Nonstandard spaces(individual space):
+#		 1 volume
+#		  1) anat ~~individual’s anatomical reference, native BOLD resolution
+# 		  2) func ~~individual’s BOLD reference
+#		 2 Surface
+#		  1) fsnative fsaverage ~~FreeSurfer’s reconstructed surfaces for this individual
+#--------------------------------------------------------------------------------#
+
+#------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+#Configures for regress_out confounds and filter, for script step5
+
+export mni_prepre_dir=$prepre_dir/fmriprep                                  # inpur dir
+
+export regress_filter_dir=$par_dir/Regress_filter                           # output dir
+
+export BOLDfile='_task-rest_run-1_space-fsLR_den-91k_bold.dtseries.nii'           # key word of input file, here full name is sub-xx_task-rest_space-fsLR_den-91k_bold.dtseries.nii
+
+export RF_nparallel=$DCM2BIDS_nparallel                                     # Process the number of subjects simultaneously
+
+export nparallel=$DCM2BIDS_nparallel 
+
+#export IsCifti=1                                                            # if inputfiles are nifti or gifti, set 0 here
+
+export BrainMask='_task-rest_run-1_space-MNI152NLin2009cAsym_res-2_desc-brain_mask.nii.gz'    #This mask will apply for input nii files
+
+export polortnum=1                                                          # the order of detrend, 1 is demean and linear detrend, see AFNI's 3dTproject
+
+export CENSOR_MOTION=0
+
+export nuisance=('white_matter' 'csf' 'trans_x' 'trans_x_derivative1' 'trans_x_power2' 'trans_x_derivative1_power2' \
+'trans_y' 'trans_y_derivative1' 'trans_y_power2' 'trans_y_derivative1_power2' \
+'trans_z' 'trans_z_derivative1' 'trans_z_power2' 'trans_z_derivative1_power2' \
+'rot_x' 'rot_x_derivative1' 'rot_x_power2' 'rot_x_derivative1_power2' \
+'rot_y' 'rot_y_derivative1' 'rot_y_power2' 'rot_y_derivative1_power2' \
+'rot_z' 'rot_z_derivative1' 'rot_z_power2' 'rot_z_derivative1_power2')      # nuisance name in sub-xx_task-rest_desc-confounds_regressors.tsv
+
+export normalized=1                                                         # if use mean WM or CSF signals in normalization space instead of individual space
+
+#-------------Next configurations is invalid if normalized is 0------------------
+
+export Normalized_BOLD="_task-rest_run-1_space-MNI152NLin2009cAsym_res-2_desc-preproc_bold.nii.gz"        # Extract individual mean WM and CSF signals from this file
+
+export WMmask=$par_dir/fMRIScripts/template/MNI152NLin2009cAsymMasks/tpl-MNI152NLin2009cAsym_space-MNI_res-02_WMMask_09.nii.gz     # White matter Mask
+
+export CSFmask=$par_dir/fMRIScripts/template/MNI152NLin2009cAsymMasks/tpl-MNI152NLin2009cAsym_space-MNI_res-02_CSFMask_09.nii.gz   # Cerebrospinal fluid Mask
+
+export Globalmask=$par_dir/fMRIScripts/template/MNI152NLin2009cAsymMasks/tpl-MNI152NLin2009cAsym_res-02_desc-brain_mask.nii.gz   # whole brain Mask
+
+#---------------------------------------------------------------------------------
+
+#-----------------------Next configurations is for filter-------------------------
+
+export lowpass=0.01                                                         # frequency of band filter
+
+export highpass=0.1                                                         # if high pass filter ,set here value > the Nyquist frequency 0.5/TR, such 666
+
+export TR=2                                                             # repetition time
+
+#---------------------------------------------------------------------------------
+
+#------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+# Configures for smoothing
+
+export prepre_dir_nosmooth=$regress_filter_dir                              # inpur dir
+
+export smooth_dir=$par_dir/Smooth_dir                                       # output dir
+
+export BOLDfile_nosmooth=$BOLDfile  # key word of input file, here full name is sub-xx_task-rest_space-fsLR_den-91k_bold.dtseries.nii
+
+export FWHM_volume=2                                                       # FWHM of Gaussian kernel for volume space (mm)
+
+#export sBrainMask=                                                           # This mask will apply for input nii files
+
+export FWHM_surface=2                                                   # FWHM of Gaussian kernel for surface space (mm)
+
+export Surface_L=$par_dir/fMRIScripts/template/Conte69_Atlas/Conte69.L.midthickness.32k_fs_LR.surf.gii      # left surface structures are used for smoothing surface space
+
+export Surface_R=$par_dir/fMRIScripts/template/Conte69_Atlas/Conte69.R.midthickness.32k_fs_LR.surf.gii      # right surface structures are used for smoothing surface space
+
+export freesurfer_dir=$freesurfer_dir  
+
+#------------------------------------------------------------------------------------------------------------------------------------------------------------
+#------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+#Configures for convert native anatomy file to standard space, e.g., fsaverage, fsaverage5, fsaverage6, and fsLR32k
+
+export freesurfer_dir=$par_dir/fmriprep/freesurfer
+
+export Results_dir=$par_dir/Results/AnatSurf
+
+export Anat_prefix=('thickness' 'volume' 'area' 'curv' 'sulc')  #the anat files you want 
+
+export fsTarget_space=fsaverage  #the Freesurfer space, fsaverage(164k,163,842 vertices per hemispheres),fsaverage6(40k,40,962),fsaverage5(10k,10,242).
+
+export Anat_nparallel=10
+
+export anat_smooth_fwhm=2.55   #if no smooth, set 0
+
+export Surface_L=$par_dir/fMRIScripts/template/Conte69_Atlas/Conte69.L.midthickness.32k_fs_LR.surf.gii
+export Surface_R=$par_dir/fMRIScripts/template/Conte69_Atlas/Conte69.R.midthickness.32k_fs_LR.surf.gii
+
+export target_iscifti=1 #if neednot convert to fsLR32K, set 0
+
+export current_sphere_L=$par_dir/fMRIScripts/template/fsaverage/tpl-fsaverage_hemi-L_den-164k_desc-std_sphere.surf.gii
+export current_area_L=$par_dir/fMRIScripts/template/fsaverage/tpl-fsaverage_hemi-L_den-164k_desc-vaavg_midthickness.shape.gii
+export target_sphere_L=$par_dir/fMRIScripts/template/fsLR_32K/tpl-fsLR_space-fsaverage_hemi-L_den-32k_sphere.surf.gii
+export target_area_L=$par_dir/fMRIScripts/template/fsLR_32K/tpl-fsLR_hemi-L_den-32k_desc-vaavg_midthickness.shape.gii
+
+export current_sphere_R=$par_dir/fMRIScripts/template/fsaverage/tpl-fsaverage_hemi-R_den-164k_desc-std_sphere.surf.gii
+export current_area_R=$par_dir/fMRIScripts/template/fsaverage/tpl-fsaverage_hemi-R_den-164k_desc-vaavg_midthickness.shape.gii
+export target_sphere_R=$par_dir/fMRIScripts/template/fsLR_32K/tpl-fsLR_space-fsaverage_hemi-R_den-32k_sphere.surf.gii
+export target_area_R=$par_dir/fMRIScripts/template/fsLR_32K/tpl-fsLR_hemi-R_den-32k_desc-vaavg_midthickness.shape.gii
+
+#------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+
+

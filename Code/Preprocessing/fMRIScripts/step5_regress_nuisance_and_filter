@@ -1,0 +1,328 @@
+#!/bin/bash
+
+# Version: Aug 15, 2020
+# Copyrights by He liyu, BMEC, USTC
+# Email: ly666@mail.ustc.edu.cn
+
+
+
+. step0_configureScripts
+
+extract() {
+# $1 is subject's name
+	name=$1
+    mkdir $regress_filter_dir/sub-$name
+    mkdir $regress_filter_dir/sub-$name/Covs
+    
+    fslmeants -i $mni_prepre_dir/sub-$name/func/sub-$name$Normalized_BOLD \
+                        -m $WMmask > $regress_filter_dir/sub-$name/Covs/sub-$name'_meansignals_white_matter.txt' 
+
+    fslmeants -i $mni_prepre_dir/sub-$name/func/sub-$name$Normalized_BOLD \
+                        -m $CSFmask > $regress_filter_dir/sub-$name/Covs/sub-$name'_meansignals_csf.txt' 
+
+    fslmeants -i $mni_prepre_dir/sub-$name/func/sub-$name$Normalized_BOLD \
+                        -m $Globalmask > $regress_filter_dir/sub-$name/Covs/sub-$name'_meansignals_global_signal.txt'
+
+    1d_tool.py 	-infile $regress_filter_dir/sub-$name/Covs/sub-$name'_meansignals_white_matter.txt' -set_nruns 1 -overwrite \
+							-derivative -write $regress_filter_dir/sub-$name/Covs/sub-$name'_meansignals_white_matter_derivative1.txt'
+
+    1d_tool.py 	-infile $regress_filter_dir/sub-$name/Covs/sub-$name'_meansignals_csf.txt' -set_nruns 1 -overwrite \
+							-derivative -write $regress_filter_dir/sub-$name/Covs/sub-$name'_meansignals_csf_derivative1.txt'
+
+    1d_tool.py 	-infile $regress_filter_dir/sub-$name/Covs/sub-$name'_meansignals_global_signal.txt' -set_nruns 1 -overwrite \
+							-derivative -write $regress_filter_dir/sub-$name/Covs/sub-$name'_meansignals_global_signal_derivative1.txt'
+
+    
+}
+export -f extract
+
+extract_censor() {
+# $1 is subject's name
+	name=$1
+    mkdir $regress_filter_dir/sub-$name
+    mkdir $regress_filter_dir/sub-$name/Covs
+    
+    tsv=`ls $mni_prepre_dir/sub-$name/func/*desc-confounds_regressors.tsv`
+
+    j='framewise_displacement'
+
+    value=`head -1 $tsv | awk -v j=$j -F '\t' '{for (i=1;i<=NF;i++) {if ($i==j) {print i}}}'`
+
+    cut -f $value $tsv > $regress_filter_dir/sub-$name/framewise_displacement.1D
+
+    sed -i '1d'  $regress_filter_dir/sub-$name/framewise_displacement.1D
+    sed -i 's|n/a|0|g' $regress_filter_dir/sub-$name/framewise_displacement.1D
+
+    1d_tool.py 	-infile $regress_filter_dir/sub-$name/framewise_displacement.1D \
+                -moderate_mask 0 $CENSOR_MOTION \
+                -show_censor_count \
+                -write $regress_filter_dir/sub-$name/Censor_"$CENSOR_MOTION"mm.1D
+    
+}
+export -f extract_censor
+
+
+regress_out() {
+# $1 is subject's name
+	name=$1
+	pathpwd=$(pwd)
+				
+	echo $name >>$regress_filter_dir/run.txt
+	echo Begin $name
+	date1=`date`
+	mkdir $regress_filter_dir/sub-$name
+    mkdir $regress_filter_dir/sub-$name/Covs
+	cd $regress_filter_dir/sub-$name/
+
+	nuisance=($(cat $regress_filter_dir/Nuisance.txt))
+
+	echo ${nuisance[@]}
+
+	tsv=`ls $mni_prepre_dir/sub-$name/func/*desc-confounds_regressors.tsv`
+	array_name=()
+    num=0
+	for j in ${nuisance[@]}
+	do
+        if [ "$normalized" == "1" ] ;then
+            if [ "$j" == "white_matter" ] || [ "$j" == "white_matter_derivative1" ] || [ "$j" == "csf" ] || [ "$j" == "csf_derivative1" ] || [ "$j" == "global_signal" ] || [ "$j" == "global_signal_derivative1" ]
+            then
+                if [ "$num" == "0" ] ;then
+                    cp -f $regress_filter_dir/sub-$name/Covs/sub-$name"_meansignals_$j.txt" $regress_filter_dir/sub-$name/Covs/temp.txt
+                    sed -i "1i $j" $regress_filter_dir/sub-$name/Covs/temp.txt
+                    num=$[$num+1];
+                else
+                    cp -f $regress_filter_dir/sub-$name/Covs/sub-$name"_meansignals_$j.txt" $regress_filter_dir/sub-$name/Covs/temps.txt
+                    sed -i "1i $j" $regress_filter_dir/sub-$name/Covs/temps.txt
+                    paste $regress_filter_dir/sub-$name/Covs/temp.txt $regress_filter_dir/sub-$name/Covs/temps.txt >$regress_filter_dir/sub-$name/Covs/tempsum.txt
+                    mv -f $regress_filter_dir/sub-$name/Covs/tempsum.txt $regress_filter_dir/sub-$name/Covs/temp.txt
+                    num=$[$num+1];
+                fi
+            else
+                value=`head -1 $tsv | awk -v j=$j -F '\t' '{for (i=1;i<=NF;i++) {if ($i==j) {print i}}}'`
+                array_name[${#array_name[@]}]=$value
+            fi            
+        else
+		value=`head -1 $tsv | awk -v j=$j -F '\t' '{for (i=1;i<=NF;i++) {if ($i==j) {print i}}}'`
+        array_name[${#array_name[@]}]=$value
+        fi
+	done
+    
+	if [ "$[${#array_name[@]}+$num]" -ne "${#nuisance[@]}" ]
+	then
+		echo '$name lack some confounds'
+		cd $pathpwd
+		return 
+    else
+        a=`echo ${array_name[@]} | sed 's/ /,/g'`
+		cut -f $a $tsv > $regress_filter_dir/sub-$name/nuisance.tsv
+		cut -f $a $tsv > $regress_filter_dir/sub-$name/nuisance.1D
+        if [ "$normalized" == "1" ];then
+            paste $regress_filter_dir/sub-$name/Covs/temp.txt $regress_filter_dir/sub-$name/nuisance.tsv >$regress_filter_dir/sub-$name/temp.tsv
+            mv -f $regress_filter_dir/sub-$name/temp.tsv $regress_filter_dir/sub-$name/nuisance.tsv
+            cp -f $regress_filter_dir/sub-$name/nuisance.tsv $regress_filter_dir/sub-$name/nuisance.1D
+            rm $regress_filter_dir/sub-$name/Covs/temp.txt
+            rm $regress_filter_dir/sub-$name/Covs/temps.txt
+        fi
+		sed -i '1d'  $regress_filter_dir/sub-$name/nuisance.1D
+		sed -i 's|n/a|0|g' $regress_filter_dir/sub-$name/nuisance.1D
+        #sed -i '$d'  $regress_filter_dir/sub-$name/nuisance.1D
+    fi
+
+    inputfiles=`ls $mni_prepre_dir/sub-$name/func/ | grep $BOLDfile`
+
+    for input in $inputfiles
+    do 
+        #Is cifti format?
+        ext=${input%.*}
+        ext=${ext##*.}
+        ext1=${input##*.}
+        if [ "$ext" == "dtseries" ] && [ "$ext1" == "nii" ];then 
+            export IsCifti=1
+        else
+            export IsCifti=0
+        fi
+
+        if [ "$IsCifti" -eq "0" ]
+        then
+            if [ -n "$BrainMask" ] && ([ "${input##*.}" == "nii" ] || [ "${input##*.}" == "gz" ]) ;then
+                TRinfo=`3dinfo -tr $mni_prepre_dir/sub-$name/func/$input`
+                if [ "$TR" != "$TRinfo" ];then
+                    echo -e "\033[47;30m Warning: $input TR information is inconsistent with your configuration! \033[0m"
+                fi
+
+                rm $regress_filter_dir/sub-$name/$input
+                if [ -n "$CENSOR_MOTION" ] && [ "$CENSOR_MOTION" != "0" ] ;then
+                    command="3dTproject -input $mni_prepre_dir/sub-$name/func/$input \
+                        -polort $polortnum \
+                        -ort $regress_filter_dir/sub-$name/nuisance.1D \
+                        -passband $lowpass $highpass \
+                        -verb \
+                        -TR $TR \
+                        -censor $regress_filter_dir/sub-$name/Censor_"$CENSOR_MOTION"mm.1D \
+                        -mask $mni_prepre_dir/sub-$name/func/sub-$name$BrainMask \
+                        -prefix $regress_filter_dir/sub-$name/$input"
+                else
+                    command="3dTproject -input $mni_prepre_dir/sub-$name/func/$input \
+                        -polort $polortnum \
+                        -ort $regress_filter_dir/sub-$name/nuisance.1D \
+                        -passband $lowpass $highpass \
+                        -verb \
+                        -TR $TR \
+                        -mask $mni_prepre_dir/sub-$name/func/sub-$name$BrainMask \
+                        -prefix $regress_filter_dir/sub-$name/$input"
+                fi
+            elif [ "${input##*.}" == "gii" ] || [ "${input##*.}" == "nii" ] || [ "${input##*.}" == "gz" ];then
+                rm $regress_filter_dir/sub-$name/$input
+                if [ -n "$CENSOR_MOTION" ] && [ "$CENSOR_MOTION" != "0" ] ;then
+                    command="3dTproject -input $mni_prepre_dir/sub-$name/func/$input \
+                        -polort $polortnum \
+                        -ort $regress_filter_dir/sub-$name/nuisance.1D \
+                        -passband $lowpass $highpass \
+                        -verb \
+                        -TR $TR \
+                        -censor $regress_filter_dir/sub-$name/Censor_"$CENSOR_MOTION"mm.1D \
+                        -prefix $regress_filter_dir/sub-$name/$input"
+                else
+                    command="3dTproject -input $mni_prepre_dir/sub-$name/func/$input \
+                        -polort $polortnum \
+                        -ort $regress_filter_dir/sub-$name/nuisance.1D \
+                        -passband $lowpass $highpass \
+                        -verb \
+                        -TR $TR \
+                        -prefix $regress_filter_dir/sub-$name/$input"
+                fi
+
+            else
+                echo -e "\033[47;30m Warning: $input is invalid file! \033[0m"
+            fi
+
+            if [ -n "$command" ];then
+                errorinfo=`$command`  #run 
+                aaa=$?;
+                if [ "$aaa" == "1" ];then
+                    echo -e "$name exist error \n $errorinfo \n">>$regress_filter_dir/sub-$name/$name'_error_report.txt'
+                fi
+                1dplot -sepscl -title $name -jpg $regress_filter_dir/sub-$name/sub-$name'_ort1' $regress_filter_dir/sub-$name/$input.ort.1D
+                1dplot -one -title $name -jpg $regress_filter_dir/sub-$name/sub-$name'_ort2' $regress_filter_dir/sub-$name/$input.ort.1D
+                1dplot -sepscl -title $name -jpg $regress_filter_dir/sub-$name/sub-$name'_Nuisance' $regress_filter_dir/sub-$name/nuisance.1D
+            fi
+
+        else
+            TRinfo=`wb_command -file-information $mni_prepre_dir/sub-$name/func/$input -only-step-interval`
+            if [ "$TR" != "$TRinfo" ];then
+                echo -e "\033[47;30m Warning: $input TR information is inconsistent with your configuration! \033[0m"
+            fi
+
+            wb_command -cifti-convert  -to-nifti $mni_prepre_dir/sub-$name/func/$input $regress_filter_dir/sub-$name/temp_sub-$name.nii
+            rm $regress_filter_dir/sub-$name/$input
+            if [ -n "$CENSOR_MOTION" ] && [ "$CENSOR_MOTION" != "0" ] ;then
+                command="3dTproject -input $regress_filter_dir/sub-$name/temp_sub-$name.nii \
+                    -polort $polortnum \
+                    -ort $regress_filter_dir/sub-$name/nuisance.1D \
+                    -passband $lowpass $highpass \
+                    -verb \
+                    -TR $TR \
+                    -censor $regress_filter_dir/sub-$name/Censor_"$CENSOR_MOTION"mm.1D \
+                    -prefix $regress_filter_dir/sub-$name/$input"
+            else
+                command="3dTproject -input $regress_filter_dir/sub-$name/temp_sub-$name.nii \
+                    -polort $polortnum \
+                    -ort $regress_filter_dir/sub-$name/nuisance.1D \
+                    -passband $lowpass $highpass \
+                    -verb \
+                    -TR $TR \
+                    -prefix $regress_filter_dir/sub-$name/$input"
+            fi
+            errorinfo=`$command`  #run 
+            aaa=$?;
+            if [ "$aaa" == "1" ];then
+                echo -e "$name exist error \n $errorinfo \n">>$regress_filter_dir/sub-$name/$name'_error_report.txt'
+            fi
+            wb_command -cifti-convert  -from-nifti $regress_filter_dir/sub-$name/$input $mni_prepre_dir/sub-$name/func/$input -reset-timepoints $TRinfo 0 \
+            $regress_filter_dir/sub-$name/temp_$input
+            rm $regress_filter_dir/sub-$name/temp_sub-$name.nii
+            rm $regress_filter_dir/sub-$name/$input
+            mv $regress_filter_dir/sub-$name/temp_$input $regress_filter_dir/sub-$name/$input
+            1dplot -sepscl -title $name -jpg $regress_filter_dir/sub-$name/sub-$name'_ort1' $regress_filter_dir/sub-$name/$input.ort.1D
+            1dplot -one -title $name -jpg $regress_filter_dir/sub-$name/sub-$name'_ort2' $regress_filter_dir/sub-$name/$input.ort.1D
+            1dplot -sepscl -title $name -jpg $regress_filter_dir/sub-$name/sub-$name'_Nuisance' $regress_filter_dir/sub-$name/nuisance.1D
+        fi
+        
+        done
+
+    mv -f $regress_filter_dir/sub-$name/*.1D $regress_filter_dir/sub-$name/Covs/
+    mv -f $regress_filter_dir/sub-$name/*.tsv $regress_filter_dir/sub-$name/Covs/
+    echo "$name start at $date1 end at `date`" >>$regress_filter_dir/time.txt
+    echo end $name
+	cd $pathpwd
+}
+
+export -f regress_out
+
+# sublist
+
+
+sub=$(ls $mni_prepre_dir -l |grep "^d" |awk '{print $9}' |grep sub |sed "s/sub-//g")
+echo $sub >out.txt
+numSub=$(cat out.txt |awk '{print NF}')
+
+
+echo -e "\033[31m ----------------------------------------$numSub Subjects wait for processing --------------------------------- \033[0m"
+cat out.txt | xargs  -n10
+echo -e "\033[31m -------------------------------------------------------------------------------------------- \033[0m"
+
+echo -e "\033[32m ----------------------------------------Configures for Regress Out Nuisance and Filter --------------------------------- \033[0m"
+
+echo "Input_files= $mni_prepre_dir/sub-xx/func/sub-xx*$BOLDfile"*""
+
+echo "Output_DIR= $regress_filter_dir"
+
+echo "${#nuisance[@]} confounds are ${nuisance[@]}, Detrend order: $polortnum"
+
+echo  -e "\033[44;30m "Filter Band : $lowpass "~" $highpass HZ and TR is $TR"s"" \033[0m"
+
+echo "CPU settings: Handle $RF_nparallel participant simultaneously" 
+
+if [ -n "$CENSOR_MOTION" ] && [ "$CENSOR_MOTION" != "0" ] ;then
+    echo -e "\033[44;30m "Using Censor Mask "<" $CENSOR_MOTION"mm"" \033[0m"
+else
+    echo "Don't use Censor When do Regress out" 
+fi
+
+echo -e "\033[32m -------------------------------------------------------------------------------------------- \033[0m"
+
+echo -e "\033[31m ----------------------------------------Processing Start (parallel $RF_nparallel) --------------------------------- \033[0m"
+
+mkdir $regress_filter_dir
+
+echo ${nuisance[@]} > $regress_filter_dir/Nuisance.txt
+
+if [ -n "$CENSOR_MOTION" ] && [ "$CENSOR_MOTION" != "0" ] ;then
+    parallel -j $RF_nparallel extract_censor ::: $sub
+fi
+
+
+if [ "$normalized" == "1" ];then
+    echo "Using Normalized CSF and WM mask extract mean signals from $Normalized_BOLD"
+    echo "WM mask is $WMmask"
+    echo "CSF mask is $CSFmask"
+    echo "GlobalSignal mask is $Globalmask"
+    echo -e "\033[31m ----------------------------------------Extract mean signals --------------------------------- \033[0m"
+    parallel -j $RF_nparallel extract ::: $sub
+fi
+
+
+echo -e "\033[31m ----------------------------------------Regress out nuisance and filter --------------------------------- \033[0m"
+
+parallel -j $RF_nparallel --results $regress_filter_dir/ParaLog regress_out ::: $sub
+
+echo -e "\033[31m ----------------------------------------Processing Complete- --------------------------------- \033[0m"
+
+echo `date`
+
+rm out.txt
+
+
+
+
+

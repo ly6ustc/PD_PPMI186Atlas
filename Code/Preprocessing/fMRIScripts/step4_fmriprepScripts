@@ -1,0 +1,239 @@
+#!/bin/bash
+
+# Version: Aug 15, 2020
+# Copyrights by He liyu, BMEC, USTC
+# Email: ly666@mail.ustc.edu.cn
+
+#---------------------You can add some required parameters------------------------------------------------
+
+#usage: fmriprep [-h] [--version] [--skip_bids_validation]
+		#[--low-mem] ~~use lower memory 
+		#[--anat-only] ~~run anatomical workflows only
+                #[--ignore {fieldmaps,slicetiming,sbref} [{fieldmaps,slicetiming,sbref} ...]]  ~~ignore some steps 
+                #[--use-aroma]  ~~use ICA-AROMA remove headmotion effect
+		#[--cifti-output [{91k,170k}] ~~ HCP output format, left cortex surface+right cortex surface+ other volume
+                #[--fs-no-reconall] ~~ disable FreeSurfer surface preprocessing.
+
+#----------------more choice can be found in https://fmriprep.org/en/stable/usage.html --------------------------
+
+. step0_configureScripts
+
+fmriprep_func() {
+# $1 is subject's name
+	name=$1
+
+# NOTE: Remove first TRs.
+#	if [ ! $BOLD_REMOVE_TR -eq 0 ];then
+#		mv $BIDSdir/sub-$name/func/sub-$name'_task-rest_bold.nii' $BIDSdir/sub-$name/func/sub-$name'_task-rest_boldo.nii'
+	#	3dTcat 	-prefix $BIDSdir/sub-$name/func/sub-$name'_task-rest_bold.nii' \
+	#			$BIDSdir/sub-$name/func/sub-$name'_task-rest_boldo.nii'"["$BOLD_REMOVE_TR"..$]"
+	#	rm $BIDSdir/sub-$name/func/sub-$name'_task-rest_boldo.nii'
+	#fi
+
+# NOTE: Use fmriprep-docker.			
+	echo $name >>$prepre_dir/run.txt
+	echo Begin $name
+
+	date1=`date`
+	if [ ! $freesurfer_dir ]; then
+		command="docker run -i --name fmriprep$name --rm \
+			-v $fs_licence:/opt/freesurfer/license.txt:ro \
+			-v $BIDSdir:/data:ro \
+            -v /home/z/Data/Toolbox/templateflow:/home/fmriprep/.cache/templateflow \
+			-v $prepre_dir:/out \
+			-v $work_dir/work:/scratch \
+			poldracklab/fmriprep:latest \
+			/data /out \
+			participant --participant-label $name \
+			-w /scratch \
+			--use-aroma \
+			--nthreads $nthreads \
+		 	--output-spaces $out_space \
+      --cifti-output"
+	else
+		command="docker run -i --name fmriprep$name --rm \
+			-v $fs_licence:/opt/freesurfer/license.txt:ro \
+			-v $BIDSdir:/data:ro \
+            -v /home/z/Data/Toolbox/templateflow:/home/fmriprep/.cache/templateflow \
+			-v $prepre_dir:/out \
+			-v $freesurfer_dir:/opt/subjects \
+			-v $work_dir/work:/scratch \
+			poldracklab/fmriprep:latest \
+			/data /out \
+			participant \
+			--fs-subjects-dir /opt/subjects \
+			-w /scratch \
+			--participant-label $name \
+			--use-aroma \
+			--nthreads $nthreads \
+		 	--output-spaces $out_space \
+      --cifti-output"
+	fi
+	errorinfo=`$command`  #run fmriprep
+  	aaa=$?;
+	if [ "$aaa" == "1" ];then
+		echo -e "$name exist error \n $errorinfo \n">>$prepre_dir/$name/$name'_error_report.txt'
+	fi
+	echo "$name start at $date1 end at `date`" >>$prepre_dir/time.txt
+	echo end $name
+}
+
+export -f fmriprep_func
+
+# sublist
+
+
+sub=$(ls $BIDSdir -l |grep "^d" |awk '{print $9}' |grep sub |sed "s/sub-//g")
+echo $sub >out.txt
+numSub=$(cat out.txt |awk '{print NF}')
+
+
+echo -e "\033[31m -----------------------------------$numSub Subjects wait for processing ------------------------------------------------ \033[0m"
+
+cat out.txt | xargs  -n10
+
+echo -e "\033[31m ------------------------------------------------------------------------------------------------------------------------ \033[0m"
+
+
+echo -e "\033[32m -------------------------------------------Configures for fmriprep------------------------------------------------------ \033[0m"
+
+echo "Input_DIR= $BIDSdir"
+
+echo "Output_DIR= $prepre_dir"
+
+echo "Work_DIR= $work_dir"
+
+echo "Existing Freesurfer_DIR= $freesurfer_dir"
+
+#echo "Discard first $BOLD_REMOVE_TR time points and BOLD Out space:"
+
+echo "BOLD Out space:"
+
+echo $out_space
+
+echo "CPU settings: Handle $fmriprep_nparallel participant simultaneously, max nunber of threads is $nthreads" 
+
+echo -e "\033[32m ------------------------------------------------------------------------------------------------------------------------ \033[0m"
+
+echo -e "\033[31m ------------------------------------fmriprep Start (parallel $fmriprep_nparallel)--------------------------------------- \033[0m"
+
+#if [ ! $BOLD_REMOVE_TR -eq 0 ];then
+#	cp -r $BIDSdir $BIDSdir'_orignal'
+#fi
+
+parallel -j $fmriprep_nparallel --results $prepre_dir/ParaLog fmriprep_func ::: $sub
+
+# delete docker's container because some containers might remain
+for i in $sub
+do 
+	docker container kill fmriprep$i
+done
+
+
+#parallel -j $fmriprep_nparallel docker container kill ::: $sub
+
+echo -e "\033[31m -----------------------------------------fmriprep Complete------------------------------------------------------------- \033[0m"
+
+echo `date`
+
+echo -e "\033[32m -------------------------------------------Organize fmriprep result---------------------------------------------------- \033[0m"
+
+rm out.txt
+
+#if [ ! $BOLD_REMOVE_TR -eq 0 ];then
+#	rm -rf $BIDSdir
+#	mv -f $BIDSdir'_orignal' $BIDSdir
+#fi
+ 
+
+echo -e "\033[33m --------------------------------------Generate fmriprep Group Report----------------------------------------------------- \033[0m"
+
+sub=$(ls $prepre_dir/fmriprep -l |grep "^d" |awk '{print $9}' |grep sub |sed "s/sub-//g")
+
+echo "<HTML><HEAD><TITLE>Check Surface Reconstruction</TITLE>" > ../fmriprep/QC_SurfaceReconstruction.html
+echo "<link rel="stylesheet" ...href="exp.css" type="text/css">" >> ../fmriprep/QC_SurfaceReconstruction.html
+echo "</HEAD>" >> ../fmriprep/QC_SurfaceReconstruction.html
+echo "<BODY>" >> ../fmriprep/QC_SurfaceReconstruction.html
+echo "<H1>Check Surface Reconstruction</H1>" >> ../fmriprep/QC_SurfaceReconstruction.html
+echo "<HR SIZE=5>" >> ../fmriprep/QC_SurfaceReconstruction.html
+
+for i in $sub
+do
+    echo "<li>Subject ID: sub-$i</li>" >> ../fmriprep/QC_SurfaceReconstruction.html
+	for j in `ls ../fmriprep/fmriprep/sub-$i/figures |grep desc-reconall_T1w.svg`
+	do		
+		echo "<div class="elem-image">" >> ../fmriprep/QC_SurfaceReconstruction.html
+		echo "<li>$j</li>" >> ../fmriprep/QC_SurfaceReconstruction.html
+		echo "<object data=" ../fmriprep/fmriprep/sub-$i/figures/$j" type="image/svg+xml"></object>" >> ../fmriprep/QC_SurfaceReconstruction.html
+		echo "</div>" >> ../fmriprep/QC_SurfaceReconstruction.html
+		echo "<br>" >> ../fmriprep/QC_SurfaceReconstruction.html
+		echo "<br>" >> ../fmriprep/QC_SurfaceReconstruction.html
+	done
+done
+
+echo "</BODY>" >> ../fmriprep/QC_SurfaceReconstruction.html
+echo "</HTML>" >> ../fmriprep/QC_SurfaceReconstruction.html
+
+#wkhtmltopdf  ../fmriprep/QC_SurfaceReconstruction.html  ../fmriprep/QC_SurfaceReconstruction.pdf
+
+echo "<HTML><HEAD><TITLE>Check T1 to MNI registration</TITLE>" > ../fmriprep/QC_T1toMNI.html
+echo "<link rel="stylesheet" ...href="exp.css" type="text/css">" >> ../fmriprep/QC_T1toMNI.html
+echo "</HEAD>" >> ../fmriprep/QC_T1toMNI.html
+echo "<BODY>" >> ../fmriprep/QC_T1toMNI.html
+echo "<H1>Check T1 to MNI registration</H1>" >> ../fmriprep/QC_T1toMNI.html
+echo "<HR SIZE=5>" >> ../fmriprep/QC_T1toMNI.html
+
+for i in $sub
+do
+	echo "<li>Subject ID: sub-$i</li>" >> ../fmriprep/QC_T1toMNI.html
+	for j in `ls ../fmriprep/fmriprep/sub-$i/figures |grep _space-`
+		do 
+		echo "<li>sub-$i/$j</li>" >> ../fmriprep/QC_T1toMNI.html
+		echo "<div class="elem-image">" >> ../fmriprep/QC_T1toMNI.html
+		echo "<object data=" ../fmriprep/fmriprep/sub-$i/figures/$j" type="image/svg+xml"></object>" >> ../fmriprep/QC_T1toMNI.html
+		echo "</div>" >> ../fmriprep/QC_T1toMNI.html
+		echo "<br>" >> ../fmriprep/QC_T1toMNI.html
+		echo "<br>" >> ../fmriprep/QC_T1toMNI.html
+	done
+done
+
+echo "</BODY>" >> ../fmriprep/QC_T1toMNI.html
+echo "</HTML>" >> ../fmriprep/QC_T1toMNI.html
+
+
+echo "<HTML><HEAD><TITLE>Check EPI to T1 registration</TITLE>" > ../fmriprep/QC_EPItoT1.html
+echo "<link rel="stylesheet" ...href="exp.css" type="text/css">" >> ../fmriprep/QC_EPItoT1.html
+echo "</HEAD>" >> ../fmriprep/QC_EPItoT1.html
+echo "<BODY>" >> ../fmriprep/QC_EPItoT1.html
+echo "<H1>Check EPI to T1 registration</H1>" >> ../fmriprep/QC_EPItoT1.html
+echo "<HR SIZE=5>" >> ../fmriprep/QC_EPItoT1.html
+
+
+for i in $sub
+do
+	echo "<li>Subject ID: sub-$i</li>" >> ../fmriprep/QC_EPItoT1.html
+	for k in `ls ../fmriprep/fmriprep/sub-$i/figures/ |grep desc-bbregister`
+		do
+			echo "<li>$k</li>" >> ../fmriprep/QC_EPItoT1.html
+			echo "<div class="elem-image">" >> ../fmriprep/QC_EPItoT1.html
+			echo "<object data=" ../fmriprep/fmriprep/sub-$i/figures/$k" type="image/svg+xml"></object>" >> ../fmriprep/QC_EPItoT1.html
+			echo "</div>" >> ../fmriprep/QC_EPItoT1.html
+			echo "<br>" >> ../fmriprep/QC_EPItoT1.html
+			echo "<br>" >> ../fmriprep/QC_EPItoT1.html
+		done
+done
+
+echo "</BODY>" >> ../fmriprep/QC_EPItoT1.html
+echo "</HTML>" >> ../fmriprep/QC_EPItoT1.html
+
+echo -e "\033[33m -----------------------------------Organize fmriprep Group HTML complete------------------------------------------ \033[0m"
+
+echo -e "\033[32m -------------------------------------Organize fmriprep complete--------------------------------------------------- \033[0m"
+
+echo -e "\033[31m -----------------------------------------------All fmriprep Done-------------------------------------------------- \033[0m"
+
+echo `date`
+
+
+
+

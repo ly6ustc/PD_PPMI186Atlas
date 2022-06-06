@@ -1,0 +1,260 @@
+#!/bin/bash
+
+# Version: Aug 18, 2020
+# Copyrights by He liyu, BMEC, USTC
+# Email: ly666@mail.ustc.edu.cn
+
+#---------------------You can add some required parameters------------------------------------------------
+
+#usage: mriqc [-h] [--version] 
+ 		#--n_procs, --nprocs, --n_cpus, --nprocs  ~number of threads
+		#--mem_gb	~~available total memory
+		#--fd_thres	~~ motion threshold for FD computation
+		#--ica ~~Run ICA on the raw data and include the componentsin the individual reports (slow but potentially very insightful)
+		#--hmc-afni	~~Use ANFI 3dvolreg for head motion correction (HMC) - default
+		#--hmc-fsl	~~Use FSL MCFLIRT instead of AFNI for head motion correction (HMC)
+
+#----------------more choice can be found in https://mriqc.readthedocs.io/en/latest/running.html--------------------------
+
+. step0_configureScripts
+
+mriqc_func() {
+# $1 is subject's name
+	name=$1
+
+# NOTE: Use mriqc			
+	echo $name >>$prepre_dirQC/run.txt
+	echo Begin $name
+
+	date1=`date`
+	command="docker run -i --name mriqc$name --rm \
+		-v $BIDSdirQC:/data:ro \
+		-v $prepre_dirQC/$name:/out \
+		-v $work_dirQC/$name/work:/scratch \
+		poldracklab/mriqc:latest \
+		/data /out \
+		participant --participant-label $name \
+		-w /scratch \
+		--no-sub \
+		--hmc-fsl \
+		--verbose-reports \
+		--modalities $mode"
+
+
+
+	errorinfo=`$command`  #run fmriqc
+  	aaa=$?;
+	if [ "$aaa" == "1" ];then
+		echo -e "$name exist error \n $errorinfo \n">>$prepre_dirQC/$name/$name'_error_report.txt'
+	fi
+	echo "mriqc$name start at $date1 end at `date`" >>$prepre_dirQC/time.txt
+	echo end $name
+}
+
+export -f mriqc_func
+
+
+# sublist
+
+sub=$(ls $BIDSdirQC -l |grep "^d" |awk '{print $9}'| grep sub |sed "s/sub-//g")
+echo $sub >out.txt
+numSub=$(cat out.txt |awk '{print NF}')
+
+
+
+echo -e "\033[31m -----------------------------------------$numSub Subjects wait for mriqc----------------------------------------------------- \033[0m"
+
+cat out.txt | xargs  -n10
+
+echo -e "\033[31m ------------------------------------------------------------------------------------------------------------------------------ \033[0m"
+
+echo -e "\033[32m ---------------------------------------------------Configures for QC---------------------------------------------------------- \033[0m"
+
+echo "Input_DIR= $BIDSdirQC"
+
+echo "Output_DIR= $prepre_dirQC"
+
+echo "Work_DIR= $work_dirQC"
+
+echo "CPU settings: Handle $nparallel participant simultaneously, max nunber of cpus is $ncpus" 
+
+echo "Use FSL MCFLIRT instead of AFNI for head motion correction (HMC)"
+
+echo -e "\033[32m ------------------------------------------------------------------------------------------------------------------------------ \033[0m"
+
+echo -e "\033[31m -----------------------------------------mriqc Start (parallel $nparallel)---------------------------------------------------- \033[0m"
+
+parallel -j $QC_nparallel --results $prepre_dirQC/ParaLog mriqc_func ::: $sub
+
+# delete docker's container because some containers might remain
+for i in $sub
+do 
+	docker container kill mriqc$i
+done
+
+echo -e "\033[31m ------------------------------------------------------mriqc Complete---------------------------------------------------------- \033[0m"
+
+echo `date`
+
+echo -e "\033[33m ---------------------------------------------------Organize mriqc result------------------------------------------------------- \033[0m"
+
+rm out.txt
+
+echo -e "\033[46;30m We will give 777 permission to outout dir('$prepre_dirQC'). If necessary, please input password! \033[0m"
+
+sudo chmod -R 777 $prepre_dirQC/
+
+mkdir $prepre_dirQC/WorkandOthers
+
+for SUBJ in $sub
+do
+	mv  -n $prepre_dirQC/$SUBJ/*html $prepre_dirQC
+    mv  -n $prepre_dirQC/$SUBJ/sub-$SUBJ $prepre_dirQC
+	mv  -n $prepre_dirQC/$SUBJ $prepre_dirQC/WorkandOthers/
+done
+
+
+echo -e "\033[33m ---------------------------------------------------Organize mriqc complete------------------------------------------------------- \033[0m"
+
+echo -e "\033[32m ---------------------------------------------------Group mriqc start------------------------------------------------------------- \033[0m"
+
+docker run -i --rm -v $BIDSdirQC:/data:ro -v $prepre_dirQC:/out poldracklab/mriqc:latest /data /out group	
+
+echo -e "\033[32m ----------------------------------------------------Group mriqc done-------------------------------------------------------------- \033[0m"
+
+echo -e "\033[33m ---------------------------------------------------Organize HeadMotion files------------------------------------------------------ \033[0m"
+
+mkdir $prepre_dirQC/RealignParameter
+for i in $sub
+do
+	mkdir $prepre_dirQC/RealignParameter/sub-$i
+	session=`ls $prepre_dirQC/sub-$i |grep ses-`
+	if [ -n "$session" ]; then
+		for j in $session
+        	do
+		    mkdir  $prepre_dirQC/RealignParameter/sub-$i/$j
+		    temp=`ls $prepre_dirQC/WorkandOthers/$i/work/mriqc_wf/funcMRIQC/fMRI_HMC_mcflirt |grep $j'_'`
+		    cp -rf $prepre_dirQC/WorkandOthers/$i/work/mriqc_wf/funcMRIQC/fMRI_HMC_mcflirt/$temp/MCFLIRT/*bold_valid_mcf.nii.gz.par $prepre_dirQC/RealignParameter/sub-$i/$j/Realighsub-$i"-$j".par
+		    cp -rf $prepre_dirQC/WorkandOthers/$i/work/mriqc_wf/funcMRIQC/fMRI_HMC_mcflirt/$temp/ComputeFD/fd_power_2012.txt $prepre_dirQC/RealignParameter/sub-$i/$j/FDsub-$i"-$j".par
+        	done
+    	else
+		    temp=`ls $prepre_dirQC/WorkandOthers/$i/work/mriqc_wf/funcMRIQC/fMRI_HMC_mcflirt`
+		    cp -rf $prepre_dirQC/WorkandOthers/$i/work/mriqc_wf/funcMRIQC/fMRI_HMC_mcflirt/$temp/MCFLIRT/*bold_valid_mcf.nii.gz.par $prepre_dirQC/RealignParameter/sub-$i/$j/Realighsub-$i"-$j".par
+		    cp -rf $prepre_dirQC/WorkandOthers/$i/work/mriqc_wf/funcMRIQC/fMRI_HMC_mcflirt/$temp/ComputeFD/fd_power_2012.txt $prepre_dirQC/RealignParameter/sub-$i/$j/FDsub-$i"-$j".par  
+    	fi
+done
+
+echo -e "\033[32m ---------------------------------------------------Generate fmriqc Group Report----------------------------------------------------- \033[0m"
+
+echo "<HTML><HEAD><TITLE>Check Q1W</TITLE>" > ../QC/groupQC_T1w.html
+echo "<link rel="stylesheet" ...href="exp.css" type="text/css">" >> ../QC/groupQC_T1w.html
+echo "</HEAD>" >> ../QC/groupQC_T1w.html
+echo "<BODY>" >> ../QC/groupQC_T1w.html
+echo "<H1>Check Q1W</H1>" >> ../QC/groupQC_T1w.html
+echo "<HR SIZE=5>" >> ../QC/groupQC_T1w.html
+
+for i in $sub
+do
+    session=`ls ../QC/sub-$i |grep ses-`
+	if [ -n "$session" ]; then
+		for j in $session
+        do
+            echo "<li>Subject ID: sub-$i/$j</li>" >> ../QC/groupQC_T1w.html
+            temp=`ls ../QC/WorkandOthers/$i/work/mriqc_wf/anatMRIQC/ReportsWorkflow |grep $j'_'`
+            echo "<div class="elem-image">" >> ../QC/groupQC_T1w.html
+            echo "<object data="../QC/WorkandOthers/$i/work/mriqc_wf/anatMRIQC/ReportsWorkflow/$temp/PlotMosaicZoomed/plot_anat_mosaic1_zoomed.svg" type="image/svg+xml"></object>" >> ../QC/groupQC_T1w.html
+            echo "</div>" >> ../QC/groupQC_T1w.html
+            echo "<br>" >> ../QC/groupQC_T1w.html
+            echo "<br>" >> ../QC/groupQC_T1w.html
+            echo "<div class="elem-image">" >> ../QC/groupQC_T1w.html
+            echo "<object data=" ../QC/WorkandOthers/$i/work/mriqc_wf/anatMRIQC/ReportsWorkflow/$temp/PlotMosaicNoise/plot_anat_mosaic2_noise.svg" type="image/svg+xml"></object>" >> ../QC/groupQC_T1w.html
+            echo "</div>" >> ../QC/groupQC_T1w.html
+            echo "<br>" >> ../QC/groupQC_T1w.html
+            echo "<br>" >> ../QC/groupQC_T1w.html
+        done
+    else
+            echo "<li>Subject ID: sub-$i</li>" >> ../QC/groupQC_T1w.html
+            temp=`ls ../QC/WorkandOthers/$i/work/mriqc_wf/anatMRIQC/ReportsWorkflow`
+            echo "<div class="elem-image">" >> ../QC/groupQC_T1w.html
+            echo "<object data="../QC/WorkandOthers/$i/work/mriqc_wf/anatMRIQC/ReportsWorkflow/$temp/PlotMosaicZoomed/plot_anat_mosaic1_zoomed.svg" type="image/svg+xml"></object>" >> ../QC/groupQC_T1w.html
+            echo "</div>" >> ../QC/groupQC_T1w.html
+            echo "<br>" >> ../QC/groupQC_T1w.html
+            echo "<br>" >> ../QC/groupQC_T1w.html
+            echo "<div class="elem-image">" >> ../QC/groupQC_T1w.html
+            echo "<object data=" ../QC/WorkandOthers/$i/work/mriqc_wf/anatMRIQC/ReportsWorkflow/$temp/PlotMosaicNoise/plot_anat_mosaic2_noise.svg" type="image/svg+xml"></object>" >> ../QC/groupQC_T1w.html
+            echo "</div>" >> ../QC/groupQC_T1w.html
+            echo "<br>" >> ../QC/groupQC_T1w.html
+            echo "<br>" >> ../QC/groupQC_T1w.html
+    fi
+done
+
+echo "</BODY>" >> ../QC/groupQC_T1w.html
+echo "</HTML>" >> ../QC/groupQC_T1w.html
+
+echo "<HTML><HEAD><TITLE>Check BOLD</TITLE>" > ../QC/groupQC_BOLD.html
+echo "<link rel="stylesheet" ...href="exp.css" type="text/css">" >> ../QC/groupQC_BOLD.html
+echo "</HEAD>" >> ../QC/groupQC_BOLD.html
+echo "<BODY>" >> ../QC/groupQC_BOLD.html
+echo "<H1>Check BOLD</H1>" >> ../QC/groupQC_BOLD.html
+echo "<HR SIZE=5>" >> ../QC/groupQC_BOLD.html
+
+for i in $sub
+do
+    session=`ls ../QC/sub-$i |grep ses-`
+	if [ -n "$session" ]; then
+		for j in $session
+        do
+			temp=`ls ../QC/WorkandOthers/$i/work/mriqc_wf/funcMRIQC/ReportsWorkflow |grep $j'_'`
+            echo "<li>Subject ID: sub-$i/$j</li>" >> ../QC/groupQC_BOLD.html
+            echo "<div class="elem-image">" >> ../QC/groupQC_BOLD.html
+            echo "<object data="../QC/WorkandOthers/$i/work/mriqc_wf/funcMRIQC/ReportsWorkflow/$temp/PlotMosaicMean/plot_func_mean_mosaic1.svg" type="image/svg+xml"></object>" >> ../QC/groupQC_BOLD.html
+            echo "</div>" >> ../QC/groupQC_BOLD.html
+            echo "<br>" >> ../QC/groupQC_BOLD.html
+            echo "<br>" >> ../QC/groupQC_BOLD.html
+            echo "<div class="elem-image">" >> ../QC/groupQC_BOLD.html
+            echo "<object data="../QC/WorkandOthers/$i/work/mriqc_wf/funcMRIQC/ReportsWorkflow/$temp/PlotMosaicSD/plot_func_stddev_mosaic2_stddev.svg" type="image/svg+xml"></object>" >> ../QC/groupQC_BOLD.html
+            echo "</div>" >> ../QC/groupQC_BOLD.html
+            echo "<br>" >> ../QC/groupQC_BOLD.html
+            echo "<br>" >> ../QC/groupQC_BOLD.html
+			echo "<div class="elem-image">" >> ../QC/groupQC_BOLD.html
+			temp2=`ls ../QC/WorkandOthers/$i/work/mriqc_wf/funcMRIQC/ReportsWorkflow/$temp/BigPlot/ | grep mcf_fmriplot.svg`
+            echo "<object data="../QC/WorkandOthers/$i/work/mriqc_wf/funcMRIQC/ReportsWorkflow/$temp/BigPlot/$temp2" width=100% height=100% type="image/svg+xml"></object>"  >> ../QC/groupQC_BOLD.html
+            echo "</div>" >> ../QC/groupQC_BOLD.html
+            echo "<br>" >> ../QC/groupQC_BOLD.html
+            echo "<br>" >> ../QC/groupQC_BOLD.html
+        done
+    else 
+            temp=`ls ../QC/WorkandOthers/$i/work/mriqc_wf/funcMRIQC/ReportsWorkflow`
+            echo "<li>Subject ID: sub-$i</li>" >> ../QC/groupQC_BOLD.html
+            echo "<div class="elem-image">" >> ../QC/groupQC_BOLD.html
+            echo "<object data="../QC/WorkandOthers/$i/work/mriqc_wf/funcMRIQC/ReportsWorkflow/$temp/PlotMosaicMean/plot_func_mean_mosaic1.svg" type="image/svg+xml"></object>" >> ../QC/groupQC_BOLD.html
+            echo "</div>" >> ../QC/groupQC_BOLD.html
+            echo "<br>" >> ../QC/groupQC_BOLD.html
+            echo "<br>" >> ../QC/groupQC_BOLD.html
+            echo "<div class="elem-image">" >> ../QC/groupQC_BOLD.html
+            echo "<object data="../QC/WorkandOthers/$i/work/mriqc_wf/funcMRIQC/ReportsWorkflow/$temp/PlotMosaicSD/plot_func_stddev_mosaic2_stddev.svg" type="image/svg+xml"></object>" >> ../QC/groupQC_BOLD.html
+            echo "</div>" >> ../QC/groupQC_BOLD.html
+            echo "<br>" >> ../QC/groupQC_BOLD.html
+            echo "<br>" >> ../QC/groupQC_BOLD.html
+			echo "<div class="elem-image">" >> ../QC/groupQC_BOLD.html
+			temp2=`ls ../QC/WorkandOthers/$i/work/mriqc_wf/funcMRIQC/ReportsWorkflow/$temp/BigPlot/ | grep mcf_fmriplot.svg`
+            echo "<object data="../QC/WorkandOthers/$i/work/mriqc_wf/funcMRIQC/ReportsWorkflow/$temp/BigPlot/$temp2" width=100% height=100% type="image/svg+xml"></object>"  >> ../QC/groupQC_BOLD.html
+            echo "</div>" >> ../QC/groupQC_BOLD.html
+            echo "<br>" >> ../QC/groupQC_BOLD.html
+            echo "<br>" >> ../QC/groupQC_BOLD.html
+    fi
+done
+
+echo "</BODY>" >> ../QC/groupQC_BOLD.html
+echo "</HTML>" >> ../QC/groupQC_BOLD.html
+
+
+echo -e "\033[33m --------------------------------------------------Organize mriqc Group HTML complete------------------------------------------- \033[0m"
+
+echo -e "\033[31m ---------------------------------------------------All mriqc Done-------------------------------------------------------------- \033[0m"
+
+echo `date`
+
+
+
+

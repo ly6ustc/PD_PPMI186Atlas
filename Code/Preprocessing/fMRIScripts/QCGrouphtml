@@ -1,0 +1,202 @@
+#!/bin/bash
+
+# Version: Aug 22, 2020
+# Copyrights by He liyu, BMEC, USTC
+# Email: ly666@mail.ustc.edu.cn
+
+
+. step0_configureScripts
+
+sub=$(ls $BIDSdir -l |grep "^d" |awk '{print $9}' |grep sub |sed "s/sub-//g")
+
+#Generage Group fmriqc Report
+echo "<HTML><HEAD><TITLE>Check Q1W</TITLE>" > ../QC/groupQC_T1w.html
+echo "<link rel="stylesheet" ...href="exp.css" type="text/css">" >> ../QC/groupQC_T1w.html
+echo "</HEAD>" >> ../QC/groupQC_T1w.html
+echo "<BODY>" >> ../QC/groupQC_T1w.html
+echo "<H1>Check Q1W</H1>" >> ../QC/groupQC_T1w.html
+echo "<HR SIZE=5>" >> ../QC/groupQC_T1w.html
+
+for i in $sub
+do
+    session=`ls ../QC/sub-$i |grep ses-`
+	if [ -n "$session" ]; then
+		for j in $session
+        do
+            echo "<li>Subject ID: sub-$i/$j</li>" >> ../QC/groupQC_T1w.html
+            temp=`ls ../QC/WorkandOthers/$i/work/mriqc_wf/anatMRIQC/ReportsWorkflow |grep $j'_'`
+            echo "<div class="elem-image">" >> ../QC/groupQC_T1w.html
+            echo "<object data="../QC/WorkandOthers/$i/work/mriqc_wf/anatMRIQC/ReportsWorkflow/$temp/PlotMosaicZoomed/plot_anat_mosaic1_zoomed.svg" type="image/svg+xml"></object>" >> ../QC/groupQC_T1w.html
+            echo "</div>" >> ../QC/groupQC_T1w.html
+            echo "<br>" >> ../QC/groupQC_T1w.html
+            echo "<br>" >> ../QC/groupQC_T1w.html
+            echo "<div class="elem-image">" >> ../QC/groupQC_T1w.html
+            echo "<object data=" ../QC/WorkandOthers/$i/work/mriqc_wf/anatMRIQC/ReportsWorkflow/$temp/PlotMosaicNoise/plot_anat_mosaic2_noise.svg" type="image/svg+xml"></object>" >> ../QC/groupQC_T1w.html
+            echo "</div>" >> ../QC/groupQC_T1w.html
+            echo "<br>" >> ../QC/groupQC_T1w.html
+            echo "<br>" >> ../QC/groupQC_T1w.html
+        done
+    else
+            echo "<li>Subject ID: sub-$i</li>" >> ../QC/groupQC_T1w.html
+            temp=`ls ../QC/WorkandOthers/$i/work/mriqc_wf/anatMRIQC/ReportsWorkflow`
+            echo "<div class="elem-image">" >> ../QC/groupQC_T1w.html
+            echo "<object data="../QC/WorkandOthers/$i/work/mriqc_wf/anatMRIQC/ReportsWorkflow/$temp/PlotMosaicZoomed/plot_anat_mosaic1_zoomed.svg" type="image/svg+xml"></object>" >> ../QC/groupQC_T1w.html
+            echo "</div>" >> ../QC/groupQC_T1w.html
+            echo "<br>" >> ../QC/groupQC_T1w.html
+            echo "<br>" >> ../QC/groupQC_T1w.html
+            echo "<div class="elem-image">" >> ../QC/groupQC_T1w.html
+            echo "<object data=" ../QC/WorkandOthers/$i/work/mriqc_wf/anatMRIQC/ReportsWorkflow/$temp/PlotMosaicNoise/plot_anat_mosaic2_noise.svg" type="image/svg+xml"></object>" >> ../QC/groupQC_T1w.html
+            echo "</div>" >> ../QC/groupQC_T1w.html
+            echo "<br>" >> ../QC/groupQC_T1w.html
+            echo "<br>" >> ../QC/groupQC_T1w.html
+    fi
+done
+
+echo "</BODY>" >> ../QC/groupQC_T1w.html
+echo "</HTML>" >> ../QC/groupQC_T1w.html
+
+echo "<HTML><HEAD><TITLE>Check BOLD</TITLE>" > ../QC/groupQC_BOLD.html
+echo "<link rel="stylesheet" ...href="exp.css" type="text/css">" >> ../QC/groupQC_BOLD.html
+echo "</HEAD>" >> ../QC/groupQC_BOLD.html
+echo "<BODY>" >> ../QC/groupQC_BOLD.html
+echo "<H1>Check BOLD</H1>" >> ../QC/groupQC_BOLD.html
+echo "<HR SIZE=5>" >> ../QC/groupQC_BOLD.html
+
+for i in $sub
+do
+    session=`ls ../QC/sub-$i |grep ses-`
+	if [ -n "$session" ]; then
+		for j in $session
+        do
+			temp=`ls ../QC/WorkandOthers/$i/work/mriqc_wf/funcMRIQC/ReportsWorkflow |grep $j'_'`
+            echo "<li>Subject ID: sub-$i/$j</li>" >> ../QC/groupQC_BOLD.html
+            echo "<div class="elem-image">" >> ../QC/groupQC_BOLD.html
+            echo "<object data="../QC/WorkandOthers/$i/work/mriqc_wf/funcMRIQC/ReportsWorkflow/$temp/PlotMosaicMean/plot_func_mean_mosaic1.svg" type="image/svg+xml"></object>" >> ../QC/groupQC_BOLD.html
+            echo "</div>" >> ../QC/groupQC_BOLD.html
+            echo "<br>" >> ../QC/groupQC_BOLD.html
+            echo "<br>" >> ../QC/groupQC_BOLD.html
+            echo "<div class="elem-image">" >> ../QC/groupQC_BOLD.html
+            echo "<object data="../QC/WorkandOthers/$i/work/mriqc_wf/funcMRIQC/ReportsWorkflow/$temp/PlotMosaicSD/plot_func_stddev_mosaic2_stddev.svg" type="image/svg+xml"></object>" >> ../QC/groupQC_BOLD.html
+            echo "</div>" >> ../QC/groupQC_BOLD.html
+            echo "<br>" >> ../QC/groupQC_BOLD.html
+            echo "<br>" >> ../QC/groupQC_BOLD.html
+			echo "<div class="elem-image">" >> ../QC/groupQC_BOLD.html
+			temp2=`ls ../QC/WorkandOthers/$i/work/mriqc_wf/funcMRIQC/ReportsWorkflow/$temp/BigPlot/ | grep mcf_fmriplot.svg`
+            echo "<object data="../QC/WorkandOthers/$i/work/mriqc_wf/funcMRIQC/ReportsWorkflow/$temp/BigPlot/$temp2" width=100% height=100% type="image/svg+xml"></object>"  >> ../QC/groupQC_BOLD.html
+            echo "</div>" >> ../QC/groupQC_BOLD.html
+            echo "<br>" >> ../QC/groupQC_BOLD.html
+            echo "<br>" >> ../QC/groupQC_BOLD.html
+        done
+    else 
+            temp=`ls ../QC/WorkandOthers/$i/work/mriqc_wf/funcMRIQC/ReportsWorkflow`
+            echo "<li>Subject ID: sub-$i</li>" >> ../QC/groupQC_BOLD.html
+            echo "<div class="elem-image">" >> ../QC/groupQC_BOLD.html
+            echo "<object data="../QC/WorkandOthers/$i/work/mriqc_wf/funcMRIQC/ReportsWorkflow/$temp/PlotMosaicMean/plot_func_mean_mosaic1.svg" type="image/svg+xml"></object>" >> ../QC/groupQC_BOLD.html
+            echo "</div>" >> ../QC/groupQC_BOLD.html
+            echo "<br>" >> ../QC/groupQC_BOLD.html
+            echo "<br>" >> ../QC/groupQC_BOLD.html
+            echo "<div class="elem-image">" >> ../QC/groupQC_BOLD.html
+            echo "<object data="../QC/WorkandOthers/$i/work/mriqc_wf/funcMRIQC/ReportsWorkflow/$temp/PlotMosaicSD/plot_func_stddev_mosaic2_stddev.svg" type="image/svg+xml"></object>" >> ../QC/groupQC_BOLD.html
+            echo "</div>" >> ../QC/groupQC_BOLD.html
+            echo "<br>" >> ../QC/groupQC_BOLD.html
+            echo "<br>" >> ../QC/groupQC_BOLD.html
+			echo "<div class="elem-image">" >> ../QC/groupQC_BOLD.html
+			temp2=`ls ../QC/WorkandOthers/$i/work/mriqc_wf/funcMRIQC/ReportsWorkflow/$temp/BigPlot/ | grep mcf_fmriplot.svg`
+            echo "<object data="../QC/WorkandOthers/$i/work/mriqc_wf/funcMRIQC/ReportsWorkflow/$temp/BigPlot/$temp2" width=100% height=100% type="image/svg+xml"></object>"  >> ../QC/groupQC_BOLD.html
+            echo "</div>" >> ../QC/groupQC_BOLD.html
+            echo "<br>" >> ../QC/groupQC_BOLD.html
+            echo "<br>" >> ../QC/groupQC_BOLD.html
+    fi
+done
+
+echo "</BODY>" >> ../QC/groupQC_BOLD.html
+echo "</HTML>" >> ../QC/groupQC_BOLD.html
+
+
+#Generage Group fmriprep Report
+
+echo "<HTML><HEAD><TITLE>Check Surface Reconstruction</TITLE>" > ../fmriprep/QC_SurfaceReconstruction.html
+echo "<link rel="stylesheet" ...href="exp.css" type="text/css">" >> ../fmriprep/QC_SurfaceReconstruction.html
+echo "</HEAD>" >> ../fmriprep/QC_SurfaceReconstruction.html
+echo "<BODY>" >> ../fmriprep/QC_SurfaceReconstruction.html
+echo "<H1>Check Surface Reconstruction</H1>" >> ../fmriprep/QC_SurfaceReconstruction.html
+echo "<HR SIZE=5>" >> ../fmriprep/QC_SurfaceReconstruction.html
+
+for i in $sub
+do
+    echo "<li>Subject ID: sub-$i</li>" >> ../fmriprep/QC_SurfaceReconstruction.html
+	for j in `ls ../fmriprep/fmriprep/sub-$i/figures |grep desc-reconall_T1w.svg`
+	do		
+		echo "<div class="elem-image">" >> ../fmriprep/QC_SurfaceReconstruction.html
+		echo "<li>$j</li>" >> ../fmriprep/QC_SurfaceReconstruction.html
+		echo "<object data=" ../fmriprep/fmriprep/sub-$i/figures/$j" type="image/svg+xml"></object>" >> ../fmriprep/QC_SurfaceReconstruction.html
+		echo "</div>" >> ../fmriprep/QC_SurfaceReconstruction.html
+		echo "<br>" >> ../fmriprep/QC_SurfaceReconstruction.html
+		echo "<br>" >> ../fmriprep/QC_SurfaceReconstruction.html
+	done
+done
+
+echo "</BODY>" >> ../fmriprep/QC_SurfaceReconstruction.html
+echo "</HTML>" >> ../fmriprep/QC_SurfaceReconstruction.html
+
+#wkhtmltopdf  ../fmriprep/QC_SurfaceReconstruction.html  ../fmriprep/QC_SurfaceReconstruction.pdf
+
+echo "<HTML><HEAD><TITLE>Check T1 to MNI registration</TITLE>" > ../fmriprep/QC_T1toMNI.html
+echo "<link rel="stylesheet" ...href="exp.css" type="text/css">" >> ../fmriprep/QC_T1toMNI.html
+echo "</HEAD>" >> ../fmriprep/QC_T1toMNI.html
+echo "<BODY>" >> ../fmriprep/QC_T1toMNI.html
+echo "<H1>Check T1 to MNI registration</H1>" >> ../fmriprep/QC_T1toMNI.html
+echo "<HR SIZE=5>" >> ../fmriprep/QC_T1toMNI.html
+
+for i in $sub
+do
+	echo "<li>Subject ID: sub-$i</li>" >> ../fmriprep/QC_T1toMNI.html
+	for j in `ls ../fmriprep/fmriprep/sub-$i/figures |grep _space-`
+		do 
+		echo "<li>sub-$i/$j</li>" >> ../fmriprep/QC_T1toMNI.html
+		echo "<div class="elem-image">" >> ../fmriprep/QC_T1toMNI.html
+		echo "<object data=" ../fmriprep/fmriprep/sub-$i/figures/$j" type="image/svg+xml"></object>" >> ../fmriprep/QC_T1toMNI.html
+		echo "</div>" >> ../fmriprep/QC_T1toMNI.html
+		echo "<br>" >> ../fmriprep/QC_T1toMNI.html
+		echo "<br>" >> ../fmriprep/QC_T1toMNI.html
+	done
+done
+
+echo "</BODY>" >> ../fmriprep/QC_T1toMNI.html
+echo "</HTML>" >> ../fmriprep/QC_T1toMNI.html
+
+
+echo "<HTML><HEAD><TITLE>Check EPI to T1 registration</TITLE>" > ../fmriprep/QC_EPItoT1.html
+echo "<link rel="stylesheet" ...href="exp.css" type="text/css">" >> ../fmriprep/QC_EPItoT1.html
+echo "</HEAD>" >> ../fmriprep/QC_EPItoT1.html
+echo "<BODY>" >> ../fmriprep/QC_EPItoT1.html
+echo "<H1>Check EPI to T1 registration</H1>" >> ../fmriprep/QC_EPItoT1.html
+echo "<HR SIZE=5>" >> ../fmriprep/QC_EPItoT1.html
+
+
+for i in $sub
+do
+	echo "<li>Subject ID: sub-$i</li>" >> ../fmriprep/QC_EPItoT1.html
+	for k in `ls ../fmriprep/fmriprep/sub-$i/figures/ |grep desc-bbregister`
+		do
+			echo "<li>$k</li>" >> ../fmriprep/QC_EPItoT1.html
+			echo "<div class="elem-image">" >> ../fmriprep/QC_EPItoT1.html
+			echo "<object data=" ../fmriprep/fmriprep/sub-$i/figures/$k" type="image/svg+xml"></object>" >> ../fmriprep/QC_EPItoT1.html
+			echo "</div>" >> ../fmriprep/QC_EPItoT1.html
+			echo "<br>" >> ../fmriprep/QC_EPItoT1.html
+			echo "<br>" >> ../fmriprep/QC_EPItoT1.html
+		done
+done
+
+echo "</BODY>" >> ../fmriprep/QC_EPItoT1.html
+echo "</HTML>" >> ../fmriprep/QC_EPItoT1.html
+
+
+
+
+echo "--------------------------------Organize HTML complete ------------------------------------"	
+echo `date`
+
+
+
+

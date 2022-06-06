@@ -1,0 +1,7 @@
+#!/bin/bash
+# Version: Aug 20, 2020
+# Copyrights by He liyu, BMEC, USTC
+# Email: ly666@mail.ustc.edu.cn
+par_dir=$(dirname $(pwd))
+inputdir=$par_dir/BIDS
+docker run -ti --rm -v $inputdir:/data:ro bids/validator /data

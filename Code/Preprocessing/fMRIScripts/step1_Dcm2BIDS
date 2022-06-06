@@ -1,0 +1,114 @@
+#!/bin/bash
+# Version: Aug 20, 2020
+# Copyrights by He liyu, BMEC, USTC
+# Email: ly666@mail.ustc.edu.cn
+
+#---------------------------------You can add some required parameters------------------------------------------------
+
+#usage: mriqc [-h] [--version] 
+ 		#--n_procs, --nprocs, --n_cpus, --nprocs  ~number of threads
+		#--mem_gb	~~available total memory
+		#--fd_thres	~~ motion threshold for FD computation
+		#--ica ~~Run ICA on the raw data and include the componentsin the individual reports (slow but potentially very insightful)
+		#--hmc-afni	~~Use ANFI 3dvolreg for head motion correction (HMC) - default
+		#--hmc-fsl	~~Use FSL MCFLIRT instead of AFNI for head motion correction (HMC)
+
+#----------------more choice can be found in https://heudiconv.readthedocs.io/en/latest/usage.html--------------------------
+
+
+. step0_configureScripts
+
+
+DCM2BIDS_func() {
+# $1 is subject's name
+	name=$1
+
+# NOTE: Use heudiconv
+		
+    echo Begin $name at `date`  
+
+    DCM_path_t=${DCM_path/'{subject}'/$name}
+
+    subIndex=`awk 'BEGIN{print match("'$DCM_path_t'","'{session}'")}'`
+
+    # sessionlist
+
+    sess=$(ls ${DCM_path_t:0:$subIndex-1} -l |grep "^d" |awk '{print $9}')
+
+    command="heudiconv -d $DCM_path -s $name -ss $sess -c dcm2niix --bids -f $(pwd)/convertallXuanwu.py -o $BIDS_path"
+
+    for i in $sess
+    do
+        command="heudiconv -d $DCM_path -s $name -ss $i -c dcm2niix --bids -f $(pwd)/convertallXuanwu.py -o $BIDS_path"
+        errorinfo=`$command`  #run 
+        aaa=$?;
+        if [ "$aaa" == "1" ];then
+            echo -e "$name exist error \n $errorinfo \n">>$BIDS_path/error_report.txt
+        fi
+    done
+    echo end $name at `date`
+}
+
+export -f DCM2BIDS_func
+
+
+
+echo -e "\033[31m --------------------------------------Start DCM2BIDS(heudiconv)------------------------------------------------------ \033[0m"
+
+echo "Dicom files path is $DCM_path"
+
+echo "BIDS Output Dir is $BIDS_path"
+
+subIndex=`awk 'BEGIN{print match("'$DCM_path'","'{subject}'")}'`
+
+# sublist
+
+sub=$(ls ${DCM_path:0:$subIndex-1} -l |grep "^d" |awk '{print $9}')
+
+echo $sub >out.txt
+
+numSub=$(cat out.txt |awk '{print NF}')
+
+echo -e "\033[32m ---------------------------------$numSub Subjects wait for DCM2BIDS-------- --------------------------------------------------- \033[0m"
+
+cat out.txt | xargs  -n10
+
+echo -e "\033[32m ------------------------------------------------------------------------------------------------------------------------------- \033[0m"
+
+rm out.txt
+
+parallel -j $DCM2BIDS_nparallel  DCM2BIDS_func ::: $sub
+
+#if session number =1, not set ses-1 dir, default: Not Do
+
+if [  1 -eq 0 ];then
+
+    for i in $sub
+    do 
+        sessnum=$(ls $BIDS_path/sub-$i -l |grep "^d"| wc -l)
+
+        if [ $sessnum -eq 1 ];then
+
+            sess=$(ls $BIDS_path/sub-$i -l |grep "^d" |awk '{print $9}')
+
+            mv  $BIDS_path/sub-$i/$sess/* $BIDS_path/sub-$i
+
+            rm -r $BIDS_path/sub-$i/$sess
+
+        fi
+    done
+fi
+
+
+echo -e "\033[31m ------------------------------------DCM2BIDS Complete-------------------------------------------------------- \033[0m"
+echo -e "If something wrong you can change the convertXuanwu.py, see https://heudiconv.readthedocs.io/en/latest/usage.html and \n https://neuroimaging-core-docs.readthedocs.io/en/latest/pages/heudiconv.htm"
+echo "If sucessful, you can valid BIDS format in https://bids-standard.github.io/bids-validator/"
+
+
+
+
+
+
+
+
+
